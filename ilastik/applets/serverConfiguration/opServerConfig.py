@@ -26,8 +26,23 @@ from typing import Optional, Dict
 DEFAULT_LOCAL_SERVER_CONFIG = {'username': '', 'password': '',
                          'address': 'localhost', 'port1': '5556', 'port2': '5557', 'devices': [['cpu', 'CPU', True]]}
 # use remote defaults as user hints
-DEFAULT_REMOTE_SERVER_CONFIG = {'username': 'SSH user name', 'password': 'SSH password (no encrytpion!)', 'ssh_key': 'SSH key',
-                                'address': 'remote host or IP address', 'port1': '5556', 'port2': '5557', 'devices': [['cpu', 'CPU', True]]}
+DEFAULT_REMOTE_SERVER_CONFIG = {
+    'username': 'SSH user name',
+    'ssh_user': 'SSH user name',
+    'password': 'SSH password (no encrytpion!)',
+    'ssh_key': 'SSH key',
+    'ssh_port': '22',
+    'address': 'localhost',
+    'port1': '5556',
+    'port2': '5557',
+    'should_start': True,
+    'devices': [
+        ['cpu', 'CPU', True],
+        ['gpu0', 'GPU-0', False],
+        ['gpu1', 'GPU-1', False],
+        ['gpu2', 'GPU-2', True],
+    ]
+}
 
 
 class OpServerConfig(Operator):

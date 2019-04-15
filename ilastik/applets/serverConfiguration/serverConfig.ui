@@ -6,179 +6,245 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>527</width>
-    <height>495</height>
+    <width>524</width>
+    <height>727</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QWidget" name="gridLayoutWidget">
+  <widget class="QWidget" name="">
    <property name="geometry">
     <rect>
-     <x>40</x>
-     <y>20</y>
-     <width>461</width>
-     <height>391</height>
+     <x>30</x>
+     <y>30</y>
+     <width>451</width>
+     <height>681</height>
     </rect>
    </property>
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
-     <widget class="QRadioButton" name="localServerButton">
+   <layout class="QVBoxLayout" name="formLayout">
+    <item>
+     <widget class="QGroupBox" name="groupBox">
+      <property name="title">
+       <string>Connection</string>
+      </property>
+      <property name="flat">
+       <bool>false</bool>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <layout class="QGridLayout" name="gridLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="addressLabel">
+           <property name="text">
+            <string>Address:</string>
+           </property>
+           <property name="buddy">
+            <cstring>addressEdit</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="addressEdit">
+           <property name="toolTip">
+            <string extracomment="Hostname or IP address"/>
+           </property>
+           <property name="readOnly">
+            <bool>false</bool>
+           </property>
+           <property name="placeholderText">
+            <string>Hostname or IP address</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="port1Label">
+           <property name="text">
+            <string>1st Port:</string>
+           </property>
+           <property name="buddy">
+            <cstring>port1Edit</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="port1Edit">
+           <property name="toolTip">
+            <string extracomment="Port"/>
+           </property>
+           <property name="placeholderText">
+            <string>Port Number</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="port2Label">
+           <property name="text">
+            <string>2nd Port</string>
+           </property>
+           <property name="buddy">
+            <cstring>port2Edit</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="port2Edit">
+           <property name="toolTip">
+            <string extracomment="Port"/>
+           </property>
+           <property name="placeholderText">
+            <string>Port Number</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QCheckBox" name="autoStartServer">
       <property name="text">
-       <string>Local server</string>
+       <string>Start server automatically</string>
       </property>
      </widget>
     </item>
-    <item row="2" column="0">
-     <widget class="QFrame" name="serverConfigBox">
-      <property name="frameShape">
-       <enum>QFrame::StyledPanel</enum>
+    <item>
+     <widget class="QGroupBox" name="sshBox">
+      <property name="enabled">
+       <bool>true</bool>
       </property>
-      <property name="frameShadow">
-       <enum>QFrame::Raised</enum>
+      <property name="title">
+       <string>SSH Configuration</string>
       </property>
-      <widget class="QWidget" name="gridLayoutWidget_2">
-       <property name="geometry">
-        <rect>
-         <x>40</x>
-         <y>30</y>
-         <width>351</width>
-         <height>240</height>
-        </rect>
-       </property>
-       <layout class="QGridLayout" name="gridLayout_3">
-        <item row="6" column="1">
-         <widget class="QLineEdit" name="port1"/>
-        </item>
-        <item row="4" column="1">
-         <widget class="QLineEdit" name="address"/>
-        </item>
-        <item row="7" column="0">
-         <widget class="QLabel" name="port2Label">
-          <property name="text">
-           <string>2nd Port</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
-         <widget class="QLineEdit" name="ssh_key"/>
-        </item>
-        <item row="2" column="1">
-         <widget class="QLineEdit" name="password"/>
-        </item>
-        <item row="4" column="0">
-         <widget class="QLabel" name="addressLabel">
-          <property name="text">
-           <string>Address:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="7" column="1">
-         <widget class="QLineEdit" name="port2"/>
-        </item>
-        <item row="6" column="0">
-         <widget class="QLabel" name="port1Label">
-          <property name="text">
-           <string>1st Port:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="ssh_keyLabel">
-          <property name="text">
-           <string>SSH Key:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <widget class="QLineEdit" name="username"/>
-        </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="passwordLabel">
-          <property name="text">
-           <string>Password:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="usernameLabel">
-          <property name="text">
-           <string>Username:</string>
-          </property>
-         </widget>
-        </item>
-        <item row="8" column="1">
-         <widget class="QListWidget" name="devices"/>
-        </item>
-        <item row="8" column="0">
-         <widget class="QPushButton" name="get_devices_button">
-          <property name="text">
-           <string>Get Devices</string>
-          </property>
-         </widget>
-        </item>
-       </layout>
-      </widget>
-      <widget class="QPushButton" name="saveButton">
-       <property name="geometry">
-        <rect>
-         <x>310</x>
-         <y>290</y>
-         <width>85</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="text">
-        <string>Save</string>
-       </property>
-       <property name="autoDefault">
-        <bool>true</bool>
-       </property>
-       <property name="default">
-        <bool>false</bool>
-       </property>
-      </widget>
-      <widget class="QPushButton" name="editButton">
-       <property name="geometry">
-        <rect>
-         <x>210</x>
-         <y>290</y>
-         <width>85</width>
-         <height>30</height>
-        </rect>
-       </property>
-       <property name="text">
-        <string>Edit</string>
-       </property>
-       <property name="autoDefault">
-        <bool>true</bool>
-       </property>
-      </widget>
+      <layout class="QGridLayout" name="gridLayout_3">
+       <item row="0" column="0">
+        <layout class="QGridLayout" name="gridLayout_2">
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="sshPortEdit"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="sshPortLabel">
+           <property name="text">
+            <string>Port</string>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QLineEdit" name="sshUserEdit"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="sshUserLabel">
+           <property name="text">
+            <string>User</string>
+           </property>
+           <property name="buddy">
+            <cstring>sshUserEdit</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <widget class="QLabel" name="sshHostLabel">
+           <property name="text">
+            <string>Host</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="sshHostEdit">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
      </widget>
     </item>
-    <item row="1" column="0">
-     <widget class="QRadioButton" name="remoteServerButton">
-      <property name="text">
-       <string>Remote server</string>
+    <item>
+     <widget class="QGroupBox" name="devicesBox">
+      <property name="title">
+       <string>Devices</string>
       </property>
+      <layout class="QGridLayout" name="gridLayout_5">
+       <item row="0" column="0">
+        <widget class="QListWidget" name="deviceList">
+         <property name="movement">
+          <enum>QListView::Static</enum>
+         </property>
+         <property name="resizeMode">
+          <enum>QListView::Fixed</enum>
+         </property>
+         <property name="spacing">
+          <number>10</number>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <layout class="QGridLayout" name="gridLayout_4">
+         <item row="0" column="1">
+          <widget class="QPushButton" name="getDevicesButton">
+           <property name="text">
+            <string>Get Devices</string>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="0">
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+      </layout>
      </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <spacer name="horizontalSpacer_2">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="editButton">
+        <property name="text">
+         <string>Edit</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="saveButton">
+        <property name="text">
+         <string>Save</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </item>
    </layout>
   </widget>
  </widget>
- <tabstops>
-  <tabstop>localServerButton</tabstop>
-  <tabstop>remoteServerButton</tabstop>
-  <tabstop>username</tabstop>
-  <tabstop>ssh_key</tabstop>
-  <tabstop>password</tabstop>
-  <tabstop>address</tabstop>
-  <tabstop>port1</tabstop>
-  <tabstop>port2</tabstop>
-  <tabstop>saveButton</tabstop>
-  <tabstop>editButton</tabstop>
- </tabstops>
  <resources/>
  <connections/>
 </ui>
