@@ -23,7 +23,7 @@ import os
 import socket
 
 from PyQt5 import uic, QtCore
-from PyQt5.QtWidgets import QWidget, QStackedWidget, QListWidgetItem, QGroupBox
+from PyQt5.QtWidgets import QWidget, QStackedWidget, QListWidgetItem, QGroupBox, QLineEdit
 from PyQt5.QtCore import QObject, pyqtSignal
 
 from ilastik.applets.serverConfiguration.opServerConfig import DEFAULT_LOCAL_SERVER_CONFIG, DEFAULT_REMOTE_SERVER_CONFIG
@@ -32,28 +32,75 @@ from tiktorch.launcher import LocalServerLauncher, RemoteSSHServerLauncher, SSHC
 from tiktorch.rpc_interface import INeuralNetworkAPI
 from tiktorch.rpc import Client, TCPConnConf
 from typing import List, Optional
+from functools import singledispatch
 
 
 logger = logging.getLogger(__name__)
 
 
+class Field:
+    class _Value:
+        def __init__(self, value):
+
+    def __init__(self):
+        self.name = None
+        self.default = None
+
+    def __get__(self, instance, owner):
+        if not instance:
+            return self
+
+        return instance.__dict__.get(self.name, self.default)
+
+    def __set__(self, instance, value):
+        oldval = instance.__dict__.get(self.name)
+        if oldval != value:
+            instance.__dict__[self.name] = value
+            instance.changedSignal.emit(self.name)
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+def connect(instance, field, input_):
+    def changed(name):
+        if name in _listeners:
+            for listener in _listeners[name]:
+                listener()
+
+        input.textChanged.connect(lambda txt: )
+    pass
+
+
+@singledispatch
+def _connect(field, input_, datasource):
+    raise NotImplementedError(f"Connection between {field} and {input_}")
+
+@_connect.register(Field, QLineEdit)
+def _line_edit_connection(field, input_, datasource):
+    name = field.name
+    def _handler_reverse(text):
+        datasource[name] = text
+
+    input_.textChanged.connect(_handler_reverse)
+
 class ServerConfigModel(QObject):
     changedSignal = pyqtSignal([str])
 
-    host: str
-    port1: str
-    port2: str
-    autoStart: bool
-    devices: List[str]
+    host: str = Field()
+    port1: str = Field()
+    port2: str = Field()
+    autoStart: bool = Field()
+    devices: List[str] = Field()
 
     # SSH Launcher
-    sshHost = Optional[str]
-    sshPort = Optional[str]
-    sshUser = Optional[str]
+    sshHost = Optional[str] = Field()
+    sshPort = Optional[str] = Field()
+    sshUser = Optional[str] = Field()
 
     def __init__(self, config):
         super().__init__(parent=None)
         self._config = config
+        self._listeners_by_name = {}
 
     def __getitem__(self, key):
         if key in self._config:
