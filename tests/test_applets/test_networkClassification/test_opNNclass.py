@@ -12,42 +12,11 @@ from ilastik.applets.networkClassification.opNNclass import (
     OpModelPipeline,
 )
 from lazyflow import rtype, stype
-from lazyflow.graph import Graph
 from lazyflow.graph import Operator, InputSlot, OutputSlot
 from lazyflow.classifiers import TikTorchLazyflowClassifierFactory
 from types import SimpleNamespace
 
 
-@pytest.fixture
-def graph():
-    return Graph()
-
-
-@pytest.fixture
-def op(graph):
-    return OpServerFactory(graph=graph)
-
-
-def test_factory(op):
-    def factory(conf):
-        time.sleep(random.random() * 0.1)
-        return SimpleNamespace(**conf)
-
-    factory_spy = mock.Mock(wraps=factory)
-
-    op.ServerConfig.setValue({"val": 1})
-    op.ServerFactory.setValue(factory_spy)
-
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        list(ex.map(lambda _: op.Server.value, range(4)))
-
-    factory_spy.assert_called_once()
-    srv = op.Server.value
-    assert srv.val == 1
-
-
-def test_factory_default_value_is_tiktorch_factory(op):
-    assert op.ServerFactory.value is TikTorchLazyflowClassifierFactory
 
 
 class TestOpOpaqueCache:
@@ -126,29 +95,7 @@ def test_a(graph):
 
 from ilastik.applets.base.appletSerializer import AppletSerializer, BinarySlot, SerialSlot
 
-from dataclasses import dataclass
-
 import json
-
-@dataclass
-class State:
-    """
-    Stores model state
-    As opaque serialized tensors
-    """
-    model: bytes
-    optimizer: bytes
-
-@dataclass
-class Model:
-    code: bytes
-    state: State
-    config: dict
-
-    def __bool__(self):
-        return bool(self.code)
-
-Model.Empty = Model(b"", State(b"", b""), {})
 
 
 def json_dumps_binary(value):
@@ -268,3 +215,10 @@ class TestModelSlotSerialization:
 
         assert not op.Out.value
         assert op.Out.value is Model.Empty
+
+
+import importlib
+
+def test_it():
+    import sys
+    sys = importlib.reload(sys)

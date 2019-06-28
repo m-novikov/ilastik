@@ -7,16 +7,24 @@ from lazyflow.classifiers import TikTorchLazyflowClassifierFactory
 from lazyflow.graph import Operator, InputSlot, OutputSlot
 
 
+def _set_meta_for_opaque(*slots):
+    # TODO: Opaque slots shouldn't require setupOutputs. Fix it in lazyflow.slot
+    for slot in slots:
+        slot.meta.shape = (1,)
+        slot.meta.dtype = object
+
+
 class OpModelPipeline(Operator):
-    ServerConfig = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    ServerConfig = InputSlot(stype=stype.Opaque)
+    # Model: code of the model and hyperparameters config
+    Model = InputSlot(stype=stype.Opaque)
+    # ModelState includes serialized tensors and optimizer state
+    ModelState = InputSlot(stype=stype.Opaque)
 
-    ModelConfig = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryModel = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryModelState = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryOptimizerState = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-
-    Server = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    Model = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    # Server controls
+    Server = OutputSlot(stype=stype.Opaque)
+    # Model controls implies it's uploaded to the server and running
+    ModelHandle = OutputSlot(stype=stype.Opaque)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -26,34 +34,33 @@ class OpModelPipeline(Operator):
 
         self._model = OpModelLoad(parent=self)
         self._model.Server.connect(self._srv_factory.Server)
-        self._model.Config.connect(self.ModelConfig)
-        self._model.BinaryModel.connect(self.BinaryModel)
-        self._model.BinaryModelState.connect(self.BinaryModelState)
-        self._model.BinaryOptimizerState.connect(self.BinaryOptimizerState)
-        self.Model.connect(self._model.Model)
+        self._model.Model.connect(self.Model)
+        self._model.State.connect(self.ModelState)
+        self.ModelHandle.connect(self._model.Handle)
+
+    def setupOutputs(self):
+        _set_meta_for_opaque(self.Model, self.State, self.ServerConfig)
 
     def propagateDirty(self, slot, subindex, roi):
-        self.Model.setDirty()
+        if slot == self.ServerConfig:
+            self.Server.setDirty()
+
+        self.ModelHandle.setDirty()
 
 
 class OpServerFactory(Operator):
-    ServerConfig = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    ServerFactory = InputSlot(
-        stype=stype.Opaque,
-        rtype=rtype.Everything,
-        value=TikTorchLazyflowClassifierFactory,
-    )
+    ServerConfig = InputSlot(stype=stype.Opaque)
 
-    Server = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    Server = OutputSlot(stype=stype.Opaque)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._cache = None
         self._cache_lock = threading.Lock()
+        self._srv_factory = TikTorchLazyflowClassifierFactory
 
     def _createServer(self):
-        factory = self.ServerFactory.value
-        return factory(self.ServerConfig.value)
+        return self._srv_factory(self.ServerConfig.value)
 
     def execute(self, slot, subindex, roi, result):
         if self._cache:
@@ -92,13 +99,12 @@ def clean(data):
 
 
 class OpModelLoad(Operator):
-    Server = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    Config = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryModel = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryModelState = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
-    BinaryOptimizerState = InputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    Server = InputSlot(stype=stype.Opaque)
+    Model = InputSlot(stype=stype.Opaque)
+    State = InputSlot(stype=stype.Opaque)
 
-    Model = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    # Model handle allowin create checkpoint and query for block size
+    Handle = OutputSlot(stype=stype.Opaque)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -106,22 +112,20 @@ class OpModelLoad(Operator):
         self._cache_lock = threading.Condition()
 
     def setupOutputs(self):
-        self.Model.meta.shape = (1,)
-        self.Model.meta.dtype = object
+        _set_meta_for_opaque(self.Handle)
 
     def propagateDirty(self, slot, subindex, roi):
         self._cache = None
-        self.Model.setDirty()
+        self.Handle.setDirty()
 
     def _load_model(self):
-        conf = clean(self.Config.value)
-
-        model_binary = bytes(self.BinaryModel.value)
-        model_state = bytes(self.BinaryModelState.value)
-        opt_state = bytes(self.BinaryOptimizerState.value)
-
+        model = self.Model.value
+        state = self.State.value
         srv = self.Server.value
-        return srv.load_model(conf, model_binary, model_state, opt_state)
+
+        conf = clean(model.config)
+
+        return srv.load_model(conf, model.code, state.model, state.optimizer)
 
     def execute(self, slot, subindex, roi, result):
         if self._cache:
