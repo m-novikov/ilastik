@@ -30,10 +30,10 @@ from ilastik.applets.base.appletSerializer import (
     AppletSerializer,
     SerialSlot,
     SerialListSlot,
-    SerialDictSlot,
     SerialBlockSlot,
-    SerialPickleableSlot,
     BinarySlot,
+    json_dumps_binary,
+    json_loads_binary,
 )
 
 
@@ -60,14 +60,6 @@ class NNClassificationSerializer(AppletSerializer):
         ]
 
         super().__init__(projectFileGroupName, slots)
-
-
-def json_dumps_binary(value):
-    return json.dumps(value, ensure_ascii=False).encode("utf-8")
-
-
-def json_loads_binary(value):
-    return json.loads(value.decode("utf-8"))
 
 
 def maybe_get_value(dset, key, default=None):
