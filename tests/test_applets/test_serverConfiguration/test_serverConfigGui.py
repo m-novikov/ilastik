@@ -2,12 +2,11 @@ import pytest
 
 from ilastik.applets.networkClassification import nnClassGui as nngui
 
-from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate
+from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate, QAbstractListModel
 from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit
 from ilastik.shell.gui.iconMgr import ilastikIcons
 
-#When subclassing QAbstractItemModel, at the very least you must implement index(), parent(), rowCount(), columnCount(), and data(). These functions are used in all read-only models, and form the basis of editable models.
-class ServerListModel(QAbstractItemModel):
+class ServerListModel(QAbstractListModel):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
         self._data = data or []
@@ -15,10 +14,7 @@ class ServerListModel(QAbstractItemModel):
     def rowCount(self, index: QModelIndex):
         return len(self._data)
 
-    def columnCount(self, index: QModelIndex):
-        return 2
-
-    def index(self, row, column, parent):
+    def index(self, row: int, column: int = 0, parent: QModelIndex = QModelIndex()):
         return self.createIndex(row, column)
 
     def addNewEntry(self):
@@ -51,63 +47,64 @@ class ServerListModel(QAbstractItemModel):
             return False
 
         row = index.row()
-        col = index.column()
-        if col == 1:
-            self._data[row] = value
-            self.dataChanged.emit(index, index)
-            return True
-        return False
+        self._data[row] = value
+        self.dataChanged.emit(index, index)
+        return True
 
 
     def data(self, index: QModelIndex, role: int):
         row = index.row()
-        col = index.column()
-        if col == 1:
-            return self._data[row]
-        print("QUERY DATA", self._data[row])
-        return self._data[row]['name']
+
         if role == Qt.DisplayRole:
-            row = index.row()
-            return self._data[row]['name']
+            return self._data[row]["name"]
         elif role == Qt.EditRole:
-            row = index.row()
-            return self._data[row]['name']
+            return self._data[row]
 
 class ServerListWidget(QWidget):
+    """
+    Combo box widget with add/remove buttons
+    """
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._srv_combo_box = QComboBox()
-        self._add_btn = QToolButton()
-        self._add_btn.setIcon(QIcon(ilastikIcons.AddSel))
-        self._rm_btn = QToolButton()
-        layout = QHBoxLayout(self)
-        layout.addWidget(self._srv_combo_box)
-        layout.addWidget(self._add_btn)
-        layout.addWidget(self._rm_btn)
-        self._add_btn.clicked.connect(self._add)
-        self._rm_btn.clicked.connect(self._remove)
+
         self._model = None
-        #self.srv_combo_box.currentIndexChanged.connect(lambda *a: print("Changed", a))
 
-    def setModel(self, model) -> None:
-        self._model = model
-        self._srv_combo_box.setModel(self._model)
+        self._initUI()
 
-    def _add(self):
+    def _initUI(self):
+        self._srvComboBox = QComboBox(self)
+        self._addBtn = QToolButton(self)
+        self._addBtn.setIcon(QIcon(ilastikIcons.AddSel))
+        self._addBtn.clicked.connect(self._add)
+
+        self._rmBtn = QToolButton(self)
+        self._rmBtn.setIcon(QIcon(ilastikIcons.RemSel))
+        self._rmBtn.clicked.connect(self._remove)
+
+        layout = QHBoxLayout(self)
+        layout.addWidget(self._srvComboBox)
+        layout.addWidget(self._addBtn)
+        layout.addWidget(self._rmBtn)
+
+    def _add(self) -> None:
         if self._model:
             idx = self._model.addNewEntry()
-            self._srv_combo_box.setCurrentIndex(idx)
+            self._srvComboBox.setCurrentIndex(idx)
 
-    def _remove(self):
+    def _remove(self) -> None:
         idx = self.currentIndex()
         self._model.removeEntry(idx)
 
+    def setModel(self, model: ServerListModel) -> None:
+        self._model = model
+        self._srvComboBox.setModel(self._model)
+
     @property
     def currentIndexChanged(self):
-        return self._srv_combo_box.currentIndexChanged
+        return self._srvComboBox.currentIndexChanged
 
-    def currentIndex(self):
-        return self._srv_combo_box.currentIndex()
+    def currentIndex(self) -> int:
+        return self._srvComboBox.currentIndex()
 
 
 class ServerEditForm(QWidget):
