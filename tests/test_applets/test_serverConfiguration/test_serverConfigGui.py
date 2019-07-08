@@ -2,6 +2,7 @@ import pytest
 
 from ilastik.applets.networkClassification import nnClassGui as nngui
 
+from PyQt5 import uic
 from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate, QAbstractListModel
 from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit
 from ilastik.shell.gui.iconMgr import ilastikIcons
@@ -43,6 +44,7 @@ class ServerListModel(QAbstractListModel):
         return flags
 
     def setData(self, index, value, role=Qt.EditRole):
+        print("SET MODEl DATA", index.isValid(), value)
         if not index.isValid() or role != Qt.EditRole:
             return False
 
@@ -108,30 +110,50 @@ class ServerListWidget(QWidget):
 
 
 class ServerEditForm(QWidget):
+    nameEdit: QLineEdit
+    addressEdit: QLineEdit
+    typeList: QComboBox
+    usernameEdit: QLineEdit
+    port1Edit: QLineEdit
+    port2Edit: QLineEdit
+    sshKeyEdit: QLineEdit
+
+    # TODO MAKE RELATIVE
+    UI_PATH = "/home/novikov/projects/ilastik-project/ilastik/ilastik/applets/serverConfiguration/serverConfig.ui"
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._nameEdit = QLineEdit()
-        self._nameLabel = QLabel()
-        self._nameLabel.setText('Name:')
-        self._nameEdit.textChanged.connect(self._updateName)
+        # self._nameEdit = QLineEdit()
+        # self._nameLabel = QLabel()
+        # self._nameLabel.setText('Name:')
+        self._initUI()
 
         self._config = {}
-        layout = QHBoxLayout(self)
-        layout.addWidget(self._nameLabel)
-        layout.addWidget(self._nameEdit)
+        #layout = QHBoxLayout(self)
+        # layout.addWidget(self._nameLabel)
+        # layout.addWidget(self._nameEdit)
+
+    def _initUI(self):
+        """
+        Load the ui file for the central widget.
+        """
+        #local_dir = os.path.split(__file__)[0] + "/"
+        uic.loadUi(self.UI_PATH, self)
+        self.nameEdit.textChanged.connect(self._updateName)
 
     @pyqtProperty(dict, user=True)
     def config(self):
         return self._config
 
+    @config.setter
+    def config(self, value):
+        self._config = value
+        self.nameEdit.setText(value["name"])
+
     def _updateName(self, value):
         print("UDPATE NAME", value)
         self._config["name"] = value
 
-    @config.setter
-    def config(self, value):
-        self._config = value
-        self._nameEdit.setText(value["name"])
 
 
 class ServerFormItemDelegate(QItemDelegate):
@@ -140,15 +162,12 @@ class ServerFormItemDelegate(QItemDelegate):
         if dst_prop.isValid():
             name = dst_prop.name()
             setattr(editor, name, index.data(role=Qt.EditRole))
-            #return
-        super().setEditorData(editor, index)
 
-    def setModelData(self, editor: QWidget, model: QAbstractItemModel, index: QModelIndex) -> None:
-        print("SEt MODEL DATA IS CALLED", editor, model, index)
-        super().setModelData(editor, model, index)
+        super().setEditorData(editor, index)
 
 
 class ServerListEditWidget(QWidget):
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._srv_list = ServerListWidget()
