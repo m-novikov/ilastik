@@ -7,6 +7,7 @@ from ilastik.applets.networkClassification.nnClassSerializer import (
 )
 from ilastik.applets.base.appletSerializer import AppletSerializer
 from tiktorch.types import Model, ModelState
+from tiktorch.rpc import RPCFuture
 
 import h5py
 import numpy as np
@@ -228,3 +229,73 @@ class TestListModelStateSlotSerialization:
         serializer.deserializeFromHdf5(outfile, None)
 
         assert [] == op.Out.value
+
+
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor, as_completed, Future
+import time
+import random
+
+
+from tiktorch.rpc.types import _map_future as map_future, RPCFuture
+
+
+_undef = object()
+
+
+class BatchedExecutor:
+    def __init__(self, batch_size=20):
+        self._batch_size = batch_size
+        self._lock = Lock()
+        self._in_flight_count = 0
+        self._pending = []
+
+    def _is_valid_return(self, value):
+        if not isinstance(value, Future):
+            raise ValueError("Expected all submitted jobs to return Future")
+
+    def _submit_new_request(self, res=_undef):
+        with self._lock:
+            if res is not _undef:
+                self._in_flight_count -= 1
+
+            if self._pending and self._in_flight_count < self._batch_size:
+                fn, args, kwargs, user_fut = self._pending.pop()
+
+                remote_fut = fn(*args, **kwargs)
+                remote_fut.add_done_callback(self._submit_new_request)
+
+                user_fut.attach(remote_fut)
+                self._in_flight_count += 1
+
+        return res
+
+    def submit(self, function, *args, **kwargs):
+        f = RPCFuture()
+        self._pending.append((function, args, kwargs, f))
+        self._submit_new_request()
+        return f
+
+
+def test():
+    blocks = list(range(100))
+
+    def process_block(block_id):
+        time.sleep(random.random() * 0.1)
+        if random.random() < 0.2:
+            raise Exception()
+        return (block_id,)
+
+    futures = []
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        batcher = BatchedExecutor(batch_size=5)
+
+        for id_ in blocks:
+            work = lambda *a, **kw: ex.submit(process_block, *a, **kw)
+            futures.append(batcher.submit(work, id_))
+
+        for f in as_completed(futures):
+            try:
+                print("AS COMPLTED", f.result())
+            except Exception as e:
+                print("FAILED", e)
