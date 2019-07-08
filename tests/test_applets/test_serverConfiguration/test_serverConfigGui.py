@@ -10,7 +10,7 @@ from ilastik.shell.gui.iconMgr import ilastikIcons
 class ServerListModel(QAbstractItemModel):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
-        self._data = data
+        self._data = data or []
 
     def rowCount(self, index: QModelIndex):
         return len(self._data)
@@ -20,6 +20,18 @@ class ServerListModel(QAbstractItemModel):
 
     def index(self, row, column, parent):
         return self.createIndex(row, column)
+
+    def addNewEntry(self):
+        self.beginInsertRows(QModelIndex(), len(self._data), len(self._data) + 1)
+        self._data.append({"name": "Unknown"})
+        self.endInsertRows()
+        return len(self._data) - 1
+
+    def removeEntry(self, row: int):
+        if self.hasIndex(row, 0):
+            self.beginRemoveRows(QModelIndex(), row, row)
+            del self._data[row]
+            self.endRemoveRows()
 
     def parent(self, index: QModelIndex) -> QModelIndex:
         return QModelIndex()
@@ -35,17 +47,14 @@ class ServerListModel(QAbstractItemModel):
         return flags
 
     def setData(self, index, value, role=Qt.EditRole):
-        print("SETTING DATA")
         if not index.isValid() or role != Qt.EditRole:
             return False
 
         row = index.row()
         col = index.column()
         if col == 1:
-            print("SET DATA TO", value)
             self._data[row] = value
             self.dataChanged.emit(index, index)
-            print("RESULt iS", self._data)
             return True
         return False
 
@@ -70,13 +79,28 @@ class ServerListWidget(QWidget):
         self._srv_combo_box = QComboBox()
         self._add_btn = QToolButton()
         self._add_btn.setIcon(QIcon(ilastikIcons.AddSel))
+        self._rm_btn = QToolButton()
         layout = QHBoxLayout(self)
         layout.addWidget(self._srv_combo_box)
         layout.addWidget(self._add_btn)
+        layout.addWidget(self._rm_btn)
+        self._add_btn.clicked.connect(self._add)
+        self._rm_btn.clicked.connect(self._remove)
+        self._model = None
         #self.srv_combo_box.currentIndexChanged.connect(lambda *a: print("Changed", a))
 
     def setModel(self, model) -> None:
-        self._srv_combo_box.setModel(model)
+        self._model = model
+        self._srv_combo_box.setModel(self._model)
+
+    def _add(self):
+        if self._model:
+            idx = self._model.addNewEntry()
+            self._srv_combo_box.setCurrentIndex(idx)
+
+    def _remove(self):
+        idx = self.currentIndex()
+        self._model.removeEntry(idx)
 
     @property
     def currentIndexChanged(self):
