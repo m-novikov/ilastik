@@ -16,7 +16,7 @@ class ServerListModel(QAbstractItemModel):
         return len(self._data)
 
     def columnCount(self, index: QModelIndex):
-        return 1
+        return 2
 
     def index(self, row, column, parent):
         return self.createIndex(row, column)
@@ -26,13 +26,9 @@ class ServerListModel(QAbstractItemModel):
 
     def flags(self, index):
         flags = super().flags(index)
-        return flags
-        #print("FLAGS FOR", index)
 
         if index.isValid():
-            #print("SET FLAGS EDITABLE")
             flags |= Qt.ItemIsEditable
-            flags |= Qt.ItemIsDragEnabled
         else:
             flags = Qt.ItemIsDropEnabled
 
@@ -71,21 +67,23 @@ class ServerListModel(QAbstractItemModel):
 class ServerListWidget(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.srv_combo_box = QComboBox()
-        self.add_btn = QToolButton()
-        self.add_btn.setIcon(QIcon(ilastikIcons.AddSel))
+        self._srv_combo_box = QComboBox()
+        self._add_btn = QToolButton()
+        self._add_btn.setIcon(QIcon(ilastikIcons.AddSel))
         layout = QHBoxLayout(self)
-        layout.addWidget(self.srv_combo_box)
-        layout.addWidget(self.add_btn)
+        layout.addWidget(self._srv_combo_box)
+        layout.addWidget(self._add_btn)
         #self.srv_combo_box.currentIndexChanged.connect(lambda *a: print("Changed", a))
 
     def setModel(self, model) -> None:
-        self.srv_combo_box.setModel(model)
+        self._srv_combo_box.setModel(model)
 
-    #@pyqtProperty(object)
     @property
     def currentIndexChanged(self):
-        return self.srv_combo_box.currentIndexChanged
+        return self._srv_combo_box.currentIndexChanged
+
+    def currentIndex(self):
+        return self._srv_combo_box.currentIndex()
 
 
 class ServerEditForm(QWidget):
@@ -150,7 +148,7 @@ class ServerListEditWidget(QWidget):
         self._mapper.setModel(model)
         self._mapper.setItemDelegate(ServerFormItemDelegate(self))
         self._mapper.addMapping(self._srv_form, 1)
-        self._mapper.toFirst()
+        self._mapper.setCurrentIndex(self._srv_list.currentIndex())
         self._srv_list.currentIndexChanged.connect(self._mapper.setCurrentIndex)
 
 
