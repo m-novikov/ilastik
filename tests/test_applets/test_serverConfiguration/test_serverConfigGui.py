@@ -3,7 +3,7 @@ import pytest
 from ilastik.applets.networkClassification import nnClassGui as nngui
 
 from PyQt5 import uic
-from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate, QAbstractListModel
+from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate, QAbstractListModel, QListWidgetItem
 from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit
 from ilastik.shell.gui.iconMgr import ilastikIcons
 
@@ -44,13 +44,13 @@ class ServerListModel(QAbstractListModel):
         return flags
 
     def setData(self, index, value, role=Qt.EditRole):
-        print("SET MODEl DATA", index.isValid(), value)
         if not index.isValid() or role != Qt.EditRole:
             return False
 
         row = index.row()
         self._data[row] = value
         self.dataChanged.emit(index, index)
+        print("SET MODEl DATA", index.isValid(), self._data)
         return True
 
 
@@ -108,38 +108,81 @@ class ServerListWidget(QWidget):
     def currentIndex(self) -> int:
         return self._srvComboBox.currentIndex()
 
+from contextlib import contextmanager
 
 class ServerEditForm(QWidget):
     nameEdit: QLineEdit
     addressEdit: QLineEdit
     typeList: QComboBox
     usernameEdit: QLineEdit
+    usernameLabel: QLabel
     port1Edit: QLineEdit
     port2Edit: QLineEdit
     sshKeyEdit: QLineEdit
+    sshKeyLabel: QLabel
 
     # TODO MAKE RELATIVE
     UI_PATH = "/home/novikov/projects/ilastik-project/ilastik/ilastik/applets/serverConfiguration/serverConfig.ui"
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # self._nameEdit = QLineEdit()
-        # self._nameLabel = QLabel()
-        # self._nameLabel.setText('Name:')
+    def __init__(self, device_getter) -> None:
+        super().__init__(None)
         self._initUI()
 
         self._config = {}
-        #layout = QHBoxLayout(self)
-        # layout.addWidget(self._nameLabel)
-        # layout.addWidget(self._nameEdit)
+        self._device_getter = device_getter
+        self._updating = False
+
+    @property
+    def ui_path(self):
+        #local_dir = os.path.split(__file__)[0] + "/"
+        return self.UI_PATH
 
     def _initUI(self):
         """
         Load the ui file for the central widget.
         """
-        #local_dir = os.path.split(__file__)[0] + "/"
-        uic.loadUi(self.UI_PATH, self)
-        self.nameEdit.textChanged.connect(self._updateName)
+        uic.loadUi(self.ui_path, self)
+        self.typeList.setModel(QStringListModel(["remote", "local"]))
+
+        # Trigger state updates
+        self.nameEdit.textChanged.connect(self._updateConfigFromFields)
+        self.addressEdit.textChanged.connect(self._updateConfigFromFields)
+        self.typeList.currentTextChanged.connect(self._updateConfigFromFields)
+        self.port1Edit.textChanged.connect(self._updateConfigFromFields)
+        self.port2Edit.textChanged.connect(self._updateConfigFromFields)
+        self.usernameEdit.textChanged.connect(self._updateConfigFromFields)
+        self.sshKeyEdit.textChanged.connect(self._updateConfigFromFields)
+
+        # UI updates
+        self.addressEdit.textChanged.connect(self._setServerTypeFromAddress)
+        self.typeList.currentTextChanged.connect(self._changeRemoteFieldsVisibility)
+        self.getDevicesBtn.clicked.connect(self._setDevices)
+
+    def _setRemoteFieldsVisibility(self, value: bool) -> None:
+        self.sshKeyEdit.setVisible(value)
+        self.sshKeyLabel.setVisible(value)
+        self.usernameEdit.setVisible(value)
+        self.usernameLabel.setVisible(value)
+
+    def _setServerTypeFromAddress(self, address: str):
+        if address in ("localhost", "127.0.0.1"):
+            self.typeList.setCurrentText("local")
+        else:
+            self.typeList.setCurrentText("remote")
+
+    def _changeRemoteFieldsVisibility(self):
+        if self.typeList.currentText() == "local":
+            self._setRemoteFieldsVisibility(False)
+        else:
+            self._setRemoteFieldsVisibility(True)
+
+    def _setDevices(self):
+        devices = self._device_getter(self._config)
+        self.deviceList.clear()
+        for d in devices:
+            item = QListWidgetItem(f"{d[0]} ({d[1]})", self.deviceList)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
 
     @pyqtProperty(dict, user=True)
     def config(self):
@@ -148,12 +191,35 @@ class ServerEditForm(QWidget):
     @config.setter
     def config(self, value):
         self._config = value
-        self.nameEdit.setText(value["name"])
+        self._updateFieldsFromConfig()
 
-    def _updateName(self, value):
-        print("UDPATE NAME", value)
-        self._config["name"] = value
+    @contextmanager
+    def _batch_update_fields(self):
+        self._updating = True
+        yield
+        self._updating = False
 
+    def _updateConfigFromFields(self):
+        if self._updating:
+            return
+
+        self._config["name"] = self.nameEdit.text()
+        self._config["address"] = self.addressEdit.text()
+        self._config["type"] = self.typeList.currentText()
+        self._config["port1"] = self.port1Edit.text()
+        self._config["port2"] = self.port2Edit.text()
+        self._config["username"] = self.usernameEdit.text()
+        self._config["ssh_key"] = self.sshKeyEdit.text()
+
+    def _updateFieldsFromConfig(self):
+        with self._batch_update_fields():
+            self.nameEdit.setText(self._config.get("name", ""))
+            self.addressEdit.setText(self._config.get("address", ""))
+            self.typeList.setCurrentText(self._config.get("type", ""))
+            self.port1Edit.setText(self._config.get("port1", ""))
+            self.port2Edit.setText(self._config.get("port2", ""))
+            self.usernameEdit.setText(self._config.get("username", ""))
+            self.sshKeyEdit.setText(self._config.get("ssh_key", ""))
 
 
 class ServerFormItemDelegate(QItemDelegate):
@@ -165,13 +231,15 @@ class ServerFormItemDelegate(QItemDelegate):
 
         super().setEditorData(editor, index)
 
+def _devices_list(config):
+    return [('a', 'test a'), ('b', 'test b')]
 
 class ServerListEditWidget(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._srv_list = ServerListWidget()
-        self._srv_form = ServerEditForm()
+        self._srv_form = ServerEditForm(_devices_list)
         layout = QVBoxLayout(self)
         layout.addWidget(self._srv_list)
         layout.addWidget(self._srv_form)
@@ -195,7 +263,7 @@ class ServerListEditWidget(QWidget):
 @pytest.fixture
 def widget(qtbot):
     w = ServerListEditWidget()
-    w.setModel(ServerListModel(data=[{'name': 'Name 1'}, {'name': 'Name 2'}]))
+    w.setModel(ServerListModel(data=[{'name': 'Name 1', 'address': "127.0.0.1"}]))
 
     qtbot.addWidget(w)
     w.show()
