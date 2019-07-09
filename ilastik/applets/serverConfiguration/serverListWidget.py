@@ -52,9 +52,11 @@ class ServerListWidget(QWidget):
 
 
 class ServerListModel(QAbstractListModel):
-    def __init__(self, parent=None, data=None):
+    def __init__(self, parent=None, conf_store=None):
         super().__init__(parent)
-        self._data = data or []
+        self._conf_store = conf_store
+        self._data = list(self._conf_store.get_servers().values())
+        print("DATA", self._data)
 
     def rowCount(self, index: QModelIndex = QModelIndex()):
         return len(self._data)
@@ -102,5 +104,6 @@ class ServerListModel(QAbstractListModel):
             return self._data[row]
 
     def submit(self):
-        print("submit")
-        return super().submit()
+        self._conf_store.store(self._data)
+        self._data = list(self._conf_store.get_servers().values())
+        return True
