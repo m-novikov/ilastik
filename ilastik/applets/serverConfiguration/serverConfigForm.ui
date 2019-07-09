@@ -147,10 +147,15 @@
   </layout>
  </widget>
  <tabstops>
+  <tabstop>nameEdit</tabstop>
+  <tabstop>addressEdit</tabstop>
+  <tabstop>typeList</tabstop>
   <tabstop>usernameEdit</tabstop>
   <tabstop>sshKeyEdit</tabstop>
   <tabstop>port1Edit</tabstop>
   <tabstop>port2Edit</tabstop>
+  <tabstop>getDevicesBtn</tabstop>
+  <tabstop>deviceList</tabstop>
   <tabstop>saveBtn</tabstop>
   <tabstop>editBtn</tabstop>
  </tabstops>

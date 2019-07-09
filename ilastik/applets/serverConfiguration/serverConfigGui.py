@@ -26,7 +26,7 @@ from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QListWidgetItem, QListWidget
 from PyQt5.QtCore import QStateMachine, QState, QSignalTransition, pyqtSignal
 
-from ilastik.applets.serverConfiguration.opServerConfig import DEFAULT_LOCAL_SERVER_CONFIG, DEFAULT_REMOTE_SERVER_CONFIG
+#from ilastik.applets.serverConfiguration.opServerConfig import DEFAULT_LOCAL_SERVER_CONFIG, DEFAULT_REMOTE_SERVER_CONFIG
 
 from tiktorch.launcher import LocalServerLauncher, RemoteSSHServerLauncher, SSHCred
 from tiktorch.rpc_interface import INeuralNetworkAPI
@@ -34,28 +34,51 @@ from tiktorch.rpc import Client, TCPConnConf
 
 
 logger = logging.getLogger(__name__)
+from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemDelegate, Qt, QModelIndex, QDataWidgetMapper, pyqtProperty, QItemDelegate, QAbstractListModel, QListWidgetItem, pyqtSignal
+from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget
+
+from .serverConfigForm import ServerConfigForm, ServerFormWorkflow
+from .serverListWidget import ServerListWidget
+from .configStorage import ServerConfigStorage
 
 
-def _items_checked_state(lst: QListWidget):
-    for idx in range(lst.count()):
-        yield lst.item(idx).checkState() == QtCore.Qt.Checked
+class ServerFormItemDelegate(QItemDelegate):
+    def setEditorData(self, editor: QWidget, index: QModelIndex) -> None:
+        dst_prop = editor.metaObject().userProperty()
+        if dst_prop.isValid():
+            name = dst_prop.name()
+            setattr(editor, name, index.data(role=Qt.EditRole))
+
+        super().setEditorData(editor, index)
+
+def _devices_list(config):
+    return [('a', 'test a'), ('b', 'test b')]
 
 
-class CheckedTranstion(QSignalTransition):
-    def __init__(self, signal, *, reverse=False):
-        super().__init__(signal)
-        self.reverse = reverse
+class ServerConfigurationEditor(QWidget):
 
-    def eventTest(self, event) -> bool:
-        if not super().eventTest(event):
-            return False
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._srv_list = ServerListWidget()
+        self._srv_form = ServerConfigForm(_devices_list)
+        ServerFormWorkflow(self._srv_form)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self._srv_list)
+        layout.addWidget(self._srv_form)
 
-        has_checked = any(_items_checked_state(event.sender()))
+    def setModel(self, model):
+        self._srv_list.setModel(model)
 
-        if self.reverse:
-            return not has_checked
-        else:
-            return has_checked
+        self._mapper = QDataWidgetMapper(self)
+        self._mapper.setModel(model)
+        self._mapper.setItemDelegate(ServerFormItemDelegate(self))
+        self._mapper.addMapping(self._srv_form, 1)
+        self._mapper.setCurrentIndex(self._srv_list.currentIndex())
+
+        self._mapper.setSubmitPolicy(QDataWidgetMapper.ManualSubmit)
+        self._srv_form.saveBtn.clicked.connect(self._mapper.submit)
+
+        self._srv_list.currentIndexChanged.connect(self._mapper.setCurrentIndex)
 
 
 class ServerConfigGui(QWidget):

@@ -3,7 +3,7 @@ import os
 from contextlib import contextmanager
 
 from PyQt5 import uic
-from PyQt5.Qt import Qt, QStringListModel, pyqtProperty, QListWidgetItem, pyqtSignal
+from PyQt5.Qt import Qt, QStringListModel, pyqtProperty, QListWidgetItem, pyqtSignal, QEvent
 from PyQt5.QtCore import QStateMachine, QState, QSignalTransition, pyqtSignal
 from PyQt5.QtWidgets import QWidget, QComboBox, QLabel, QLineEdit, QListWidget
 
@@ -33,6 +33,7 @@ class ServerConfigForm(QWidget):
 
     @config.setter
     def config(self, value):
+        print("SETTING CONFIG TO", value)
         self._config = value
         self._updateFieldsFromConfig()
 
@@ -134,6 +135,7 @@ class ServerConfigForm(QWidget):
         yield
         self._updating = False
 
+
     def _updateConfigFromFields(self):
         if self._updating:
             return
@@ -157,6 +159,14 @@ class ServerConfigForm(QWidget):
             self.usernameEdit.setText(self._config.get("username", ""))
             self.sshKeyEdit.setText(self._config.get("ssh_key", ""))
             self._setDevicesFromConfig()
+
+    def keyPressEvent(self, event):
+        if event.type() == QEvent.KeyPress:
+            if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+                if self.saveBtn.isEnabled():
+                    self.saveBtn.click()
+
+        super().keyPressEvent(event)
 
 
 class ServerFormWorkflow:
