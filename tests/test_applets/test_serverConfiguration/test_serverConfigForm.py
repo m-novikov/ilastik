@@ -3,6 +3,7 @@ import pytest
 from PyQt5.Qt import Qt
 
 from ilastik.applets.serverConfiguration.serverConfigForm import ServerConfigForm
+from ilastik.applets.serverConfiguration import types
 
 
 class TestServerConfigForm:
@@ -24,12 +25,12 @@ class TestServerConfigForm:
         return form
 
     def test_form_creation_line_edits(self, qtbot, form):
-        data = {
+        data = types.ServerConfig.default(**{
             "name": "MyTestName",
             "address": "test.com",
             "port1": "8291",
             "port2": "8292",
-        }
+        })
 
         fields = [
             (form.nameEdit, "name"),
@@ -41,15 +42,17 @@ class TestServerConfigForm:
         form.config = data
 
         for field, key in fields:
-            assert data[key] == field.text()
+            assert getattr(data, key) == field.text()
 
     def test_form_input(self, qtbot, form):
-        data = {"name": "MyTestName"}
+        data = types.ServerConfig.default(**{"name": "MyTestName"})
         form.config = data
         qtbot.keyClicks(form.nameEdit, "42")
-        assert "MyTestName42" == form.config["name"]
+        assert "MyTestName42" == form.config.name
 
     def test_autoguess_server(self, qtbot, form):
+        form.typeList.setCurrentText("remote")
+
         assert "remote" == form.typeList.currentText()
 
         qtbot.keyClicks(form.addressEdit, "127.0.0.1")
@@ -59,36 +62,35 @@ class TestServerConfigForm:
     def test_device_list(self, qtbot, form):
         qtbot.mouseClick(form.getDevicesBtn, Qt.LeftButton)
         expected_devices = [
-            (False, dev_id, dev_name)
-            for dev_id, dev_name in self.DEVICE_LIST
+            types.Device(enabled=False, id=id_, name=name)
+            for id_, name in self.DEVICE_LIST
         ]
-        assert "devices" in form.config
-        assert expected_devices == form.config["devices"]
+        assert expected_devices == form.config.devices
 
         test_item = form.deviceList.item(1)
         click_pos = form.deviceList.visualItemRect(test_item).center()
 
         qtbot.mouseClick(form.deviceList.viewport(), Qt.LeftButton, pos=click_pos)
 
-        assert form.config["devices"][1][0]
+        assert form.config.devices[1].enabled
 
     def test_device_list_from_config(self, qtbot, form):
-        config = {"devices": [
-            (True, "cpu", "CPU"),
-            (False, "gpu:0", "GPU 12"),
-        ]}
+        config = types.ServerConfig.default(devices=[
+            types.Device(enabled=True, id="cpu", name="CPU"),
+            types.Device(enabled=False, id="gpu:0", name="GPU 12"),
+        ])
         form.config = config
         assert 2 == form.deviceList.count()
         for idx in range(form.deviceList.count()):
             widget_item = form.deviceList.item(idx)
-            device = config["devices"][idx]
-            assert bool(widget_item.checkState()) == device[0]
-            assert device[1] in widget_item.text()
+            device = config.devices[idx]
+            assert bool(widget_item.checkState()) is device.enabled
+            assert device.name in widget_item.text()
 
     def test_device_list_merging(self, qtbot, form):
-        config = {"devices": [
-            (True, "gpu:1", "GPU 12"),
-        ]}
+        config = types.ServerConfig.default(devices=[
+            types.Device(enabled=True, id="gpu:1", name="GPU 12"),
+        ])
         form.config = config
 
         qtbot.mouseClick(form.getDevicesBtn, Qt.LeftButton)
