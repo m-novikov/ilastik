@@ -26,8 +26,6 @@ from PyQt5 import uic, QtCore
 from PyQt5.QtWidgets import QWidget, QStackedWidget, QListWidgetItem, QListWidget
 from PyQt5.QtCore import QStateMachine, QState, QSignalTransition, pyqtSignal
 
-#from ilastik.applets.serverConfiguration.opServerConfig import DEFAULT_LOCAL_SERVER_CONFIG, DEFAULT_REMOTE_SERVER_CONFIG
-
 from tiktorch.launcher import LocalServerLauncher, RemoteSSHServerLauncher, SSHCred
 from tiktorch.rpc_interface import INeuralNetworkAPI
 from tiktorch.rpc import Client, TCPConnConf
@@ -38,8 +36,60 @@ from PyQt5.Qt import QIcon, QStringListModel, QAbstractItemModel, QAbstractItemD
 from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QListWidget
 
 from .serverConfigForm import ServerConfigForm, ServerFormWorkflow
-from .serverListWidget import ServerListWidget
+from .serverListWidget import ServerListWidget, ServerListModel
 from .configStorage import ServerConfigStorage
+from . import types
+from ilastik import config
+
+
+class ServerConfigGui(QWidget):
+    gotDevices = pyqtSignal()
+
+    def centralWidget(self):
+        return self._centralWidget
+
+    def appletDrawer(self):
+        return self._drawer
+
+    def menus(self):
+        return []
+
+    def viewerControlWidget(self):
+        return None
+
+    def getServerIdFromOp(self):
+        if self.topLevelOp.ServerId.ready():
+            return self.topLevelOp.ServerId.value
+        return None
+
+    def __init__(self, parentApplet, topLevelOperatorView):
+        super().__init__()
+        self.parentApplet = parentApplet
+        self.topLevelOp = topLevelOperatorView
+        self.topLevelOp.ServerId.notifyValueChanged(self.notifyValueChanged)
+        self._centralWidget = self._makeServerConfigWidget(self.getServerIdFromOp())
+        self._centralWidget.currentConfigChanged.connect(self._indexChanged)
+        self._initAppletDrawer()
+
+    def _indexChanged(self, srv):
+        self.topLevelOp.ServerId.setValue(srv.id)
+
+    def notifyValueChanged(self, *args, **kwargs):
+        print("VALUE CHANGED", args, kwargs)
+
+    def _makeServerConfigWidget(self, serverId):
+        w = ServerConfigurationEditor()
+        srv_storage = ServerConfigStorage(config.cfg, dst=config.CONFIG_PATH)
+        w.setModel(ServerListModel(conf_store=srv_storage))
+        w.selectServer(serverId)
+        return w
+
+    def _initAppletDrawer(self):
+        """
+        Load the ui file for the applet drawer.
+        """
+        local_dir = os.path.split(__file__)[0] + "/"
+        self._drawer = uic.loadUi(local_dir + "/serverConfigDrawer.ui")
 
 
 class ServerFormItemDelegate(QItemDelegate):
@@ -51,269 +101,76 @@ class ServerFormItemDelegate(QItemDelegate):
 
         super().setEditorData(editor, index)
 
-def _devices_list(config):
-    return [('a', 'test a'), ('b', 'test b')]
+
+def _fetch_devices(config: types.ServerConfig):
+    try:
+        addr, port1, port2 = (
+            socket.gethostbyname(config.address),
+            # in order not to block address for real server todo: remove port hack
+            str(int(config.port1) - 20),
+            str(int(config.port2) - 20),
+        )
+        conn_conf = TCPConnConf(addr, port1, port2)
+
+        if addr == "127.0.0.1":
+            launcher = LocalServerLauncher(conn_conf)
+        else:
+            launcher = RemoteSSHServerLauncher(
+                conn_conf, cred=SSHCred(user=config.username, key_path=config.ssh_key)
+            )
+
+        try:
+            launcher.start()
+            client = Client(INeuralNetworkAPI(), conn_conf)
+            return client.get_available_devices()
+        except Exception as e:
+            logger.exception('Failed to fetch devices')
+        finally:
+            try:
+                launcher.stop()
+            except Exception:
+                pass
+
+    except Exception as e:
+        logger.error(e)
+
+    return []
 
 
 class ServerConfigurationEditor(QWidget):
+    currentConfigChanged = pyqtSignal(object)
+    saved = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._srv_list = ServerListWidget()
-        self._srv_form = ServerConfigForm(_devices_list)
-        ServerFormWorkflow(self._srv_form)
+        self._srv_form = ServerConfigForm(_fetch_devices)
+        self._workflow = ServerFormWorkflow(self._srv_form)
+        self._model = None
         layout = QVBoxLayout(self)
         layout.addWidget(self._srv_list)
         layout.addWidget(self._srv_form)
 
+    def selectServer(self, serverId):
+        self._srv_list.selectServer(serverId)
+
+    def _selectedServer(self, idx):
+        data = self._model.index(idx).data(role=Qt.EditRole)
+        self.currentConfigChanged.emit(data)
+
     def setModel(self, model):
+        self._model = model
         self._srv_list.setModel(model)
 
         self._mapper = QDataWidgetMapper(self)
         self._mapper.setModel(model)
         self._mapper.setItemDelegate(ServerFormItemDelegate(self))
         self._mapper.addMapping(self._srv_form, 1)
+        self._mapper.currentIndexChanged.connect(self._workflow.restart)
         self._mapper.setCurrentIndex(self._srv_list.currentIndex())
 
         self._mapper.setSubmitPolicy(QDataWidgetMapper.ManualSubmit)
         self._srv_form.saveBtn.clicked.connect(self._mapper.submit)
 
         self._srv_list.currentIndexChanged.connect(self._mapper.setCurrentIndex)
-
-
-class ServerConfigGui(QWidget):
-    gotDevices = pyqtSignal()
-
-    def centralWidget(self):
-        return self
-
-    def appletDrawer(self):
-        return self._drawer
-
-    def menus(self):
-        return []
-
-    def viewerControlWidget(self):
-        return self._viewerControlWidgetStack
-
-    def _make_initial_state(self) -> QState:
-        s = QState()
-        s.assignProperty(self.editButton, "enabled", False)
-        s.assignProperty(self.saveButton, "enabled", False)
-        s.assignProperty(self.devices, "enabled", False)
-
-        # Inputs
-        s.assignProperty(self.port1, "enabled", True)
-        s.assignProperty(self.port2, "enabled", True)
-        return s
-
-    def _make_dev_fetched_state(self) -> QState:
-        s = QState()
-        s.assignProperty(self.editButton, "enabled", True)
-        s.assignProperty(self.devices, "enabled", True)
-        s.assignProperty(self.saveButton, "enabled", False)
-        s.assignProperty(self.port1, "enabled", False)
-        s.assignProperty(self.port2, "enabled", False)
-        return s
-
-    def _make_save_state(self):
-        s = QState()
-        s.assignProperty(self.saveButton, "enabled", True)
-        return s
-
-    def _create_state_machine(self) -> QStateMachine:
-        machine = QStateMachine()
-
-        init = self._make_initial_state()
-        dev_fetched = self._make_dev_fetched_state()
-        save = self._make_save_state()
-
-        machine.addState(init)
-        machine.addState(dev_fetched)
-        machine.addState(save)
-        machine.setInitialState(init)
-
-        selected_tr = CheckedTranstion(self.devices.itemChanged)
-        selected_tr.setTargetState(save)
-
-        unselected_tr = CheckedTranstion(self.devices.itemChanged, reverse=True)
-        unselected_tr.setTargetState(dev_fetched)
-
-        init.addTransition(self.gotDevices, dev_fetched)
-
-        save.addTransition(unselected_tr)
-        dev_fetched.addTransition(selected_tr)
-        dev_fetched.addTransition(self.editButton.clicked, init)
-
-        return machine
-
-    def __init__(self, parentApplet, topLevelOperatorView):
-        super().__init__()
-        self.parentApplet = parentApplet
-        self._viewerControls = QWidget()
-        self.topLevelOperator = topLevelOperatorView
-
-        self._init_central_uic()
-        # Disable box that contains username, password ect. while
-        # local server (radio button) is activated
-
-        self._state_machine = self._create_state_machine()
-        self._state_machine.start()
-
-        use_local = (
-            True if not self.topLevelOperator.UseLocalServer.ready() else self.topLevelOperator.UseLocalServer.value
-        )
-        self.localServerButton.setChecked(use_local)
-        self.remoteServerButton.setChecked(not use_local)
-
-        def edit_button():
-            self.topLevelOperator.UseLocalServer.disconnect()
-            self.topLevelOperator.UseLocalServer.meta.NOTREADY = True
-            for el in DEFAULT_REMOTE_SERVER_CONFIG.keys():
-                if self.localServerButton.isChecked() and el == "address":
-                    continue
-                getattr(self, el).setEnabled(True)
-
-        self.editButton.clicked.connect(edit_button)
-
-        def server_button():
-            self.topLevelOperator.UseLocalServer.disconnect()
-            self.topLevelOperator.UseLocalServer.meta.NOTREADY = True
-            if self.localServerButton.isChecked():
-                assert not self.remoteServerButton.isChecked()
-                config = self.topLevelOperator.LocalServerConfig.value
-                getattr(self, "address").setEnabled(False)
-                getattr(self, "username").hide()
-                getattr(self, "usernameLabel").hide()
-                getattr(self, "ssh_key").hide()
-                getattr(self, "ssh_keyLabel").hide()
-                getattr(self, "password").hide()
-                getattr(self, "passwordLabel").hide()
-            else:
-                assert self.remoteServerButton.isChecked()
-                config = self.topLevelOperator.RemoteServerConfig.value
-                getattr(self, "usernameLabel").show()
-                getattr(self, "password").show()
-                getattr(self, "passwordLabel").show()
-                getattr(self, "ssh_key").show()
-                getattr(self, "ssh_keyLabel").show()
-                getattr(self, "username").show()
-
-            self.devices.clear()
-            for key, value in config.items():
-                if key == "devices":
-                    for d in value:
-                        entry = QListWidgetItem(f"{d[0]} ({d[1]})", self.devices)
-                        entry.setFlags(entry.flags() | QtCore.Qt.ItemIsUserCheckable)
-                        if d[2]:
-                            entry.setCheckState(QtCore.Qt.Checked)
-                        else:
-                            entry.setCheckState(QtCore.Qt.Unchecked)
-                else:
-                    getattr(self, key).setText(value)
-
-            edit_button()  # enter 'edit mode' when switching between locale and remote server
-
-        self.localServerButton.toggled.connect(server_button)
-        server_button()
-
-        def get_config(configurables, with_devices=True):
-            config = {}
-            for el in configurables:
-                if el == "devices":
-                    if with_devices:
-                        available_devices = []
-                        for i in range(self.devices.count()):
-                            d = self.devices.item(i)
-                            available_devices.append(
-                                (d.text().split(" (")[0], d.text().split(" (")[1][:-1], bool(d.checkState()))
-                            )
-                        config["devices"] = available_devices
-                        self.devices.setEnabled(False)
-                else:
-                    attr = getattr(self, el)
-                    attr.setEnabled(False)
-                    config[el] = attr.text()
-
-            return config
-
-        def get_devices_button():
-            self.get_devices_button.setEnabled(False)
-            self.devices.clear()
-            if self.localServerButton.isChecked():
-                assert not self.remoteServerButton.isChecked()
-                server_config = get_config(DEFAULT_LOCAL_SERVER_CONFIG.keys(), with_devices=False)
-            else:
-                assert self.remoteServerButton.isChecked()
-                server_config = get_config(DEFAULT_REMOTE_SERVER_CONFIG.keys(), with_devices=False)
-
-            try:
-                addr, port1, port2 = (
-                    socket.gethostbyname(server_config["address"]),
-                    # in order not to block address for real server todo: remove port hack
-                    str(int(server_config["port1"]) - 20),
-                    str(int(server_config["port2"]) - 20),
-                )
-                conn_conf = TCPConnConf(addr, port1, port2)
-
-                if addr == "127.0.0.1":
-                    launcher = LocalServerLauncher(conn_conf)
-                else:
-                    launcher = RemoteSSHServerLauncher(
-                        conn_conf, cred=SSHCred(server_config["username"], server_config["password"])
-                    )
-
-                launcher.start()
-                try:
-                    tikTorchClient = Client(INeuralNetworkAPI(), conn_conf)
-                    available_devices = tikTorchClient.get_available_devices()
-                except Exception as e:
-                    logger.error(e)
-                else:
-                    for d in available_devices:
-                        entry = QListWidgetItem(f"{d[0]} ({d[1]})", self.devices)
-                        entry.setFlags(entry.flags() | QtCore.Qt.ItemIsUserCheckable)
-                        entry.setCheckState(QtCore.Qt.Unchecked)
-                    self.gotDevices.emit()
-                finally:
-                    launcher.stop()
-            except Exception as e:
-                logger.error(e)
-
-            self.get_devices_button.setEnabled(True)
-
-        self.get_devices_button.clicked.connect(get_devices_button)
-
-        def save_button():
-            self.topLevelOperator.UseLocalServer.disconnect()
-            self.topLevelOperator.UseLocalServer.meta.NOTREADY = True
-
-            use_local = self.localServerButton.isChecked()
-            if use_local:
-                assert not self.remoteServerButton.isChecked()
-                self.topLevelOperator.setLocalServerConfig(get_config(DEFAULT_LOCAL_SERVER_CONFIG.keys()))
-            else:
-                assert self.remoteServerButton.isChecked()
-                self.topLevelOperator.setRemoteServerConfig(get_config(DEFAULT_REMOTE_SERVER_CONFIG.keys()))
-
-            self.topLevelOperator.UseLocalServer.setValue(use_local)
-            self.parentApplet.appletStateUpdateRequested()
-
-        self.saveButton.clicked.connect(save_button)
-
-        self._init_applet_drawer_uic()
-        self._viewerControlWidgetStack = QStackedWidget(self)
-
-    def _init_central_uic(self):
-        """
-        Load the ui file for the central widget.
-        """
-        local_dir = os.path.split(__file__)[0] + "/"
-        uic.loadUi(local_dir + "/serverConfig.ui", self)
-
-    def _init_applet_drawer_uic(self):
-        """
-        Load the ui file for the applet drawer.
-        """
-        local_dir = os.path.split(__file__)[0] + "/"
-        self._drawer = uic.loadUi(local_dir + "/serverConfigDrawer.ui")
+        self._srv_list.currentIndexChanged.connect(self._selectedServer)

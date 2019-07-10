@@ -24,47 +24,26 @@ from lazyflow import stype
 
 from typing import Optional, Dict
 
-LOCAL = "local"
-REMOTE = "remote"
-
-LOCAL_SERVER_CONFIG = {
-    "name": "Local",
-    "type": LOCAL,
-    "config": {
-        "address": "localhost",
-        "port1": "5556",
-        "port2": "5557",
-        "devices": []
-    }
-}
-
-LOCAL_SERVER_CONFIG = {
-    "name": "Remote",
-    "type": REMOTE,
-    "config": {
-        "username": "",
-        "ssh_key": "",
-        "address": "",
-        "port1": "5556",
-        "port2": "5557",
-        "devices": []
-    }
-}
+from .configStorage import SERVER_CONFIG
 
 
 class OpServerConfig(Operator):
     name = "OpServerConfig"
     category = "top-level"
 
-    ServerConfigs = InputSlot(value=[], stype=stype.Opaque)
-    Selection = InputSlot()
+    ServerId = InputSlot(stype=stype.Opaque)
 
     ServerConfig = OutputSlot()
 
     def setupOutputs(self):
-        configs = self.ServerConfigs.value
-        selection = self.Selection.value
-        self.ServerConfig.setValue(configs[selection])
+        serverId = self.ServerId.value
+        srv = SERVER_CONFIG.get_server(serverId)
+        print("SEtTING New<<", srv)
+        if srv:
+            self.ServerConfig.setValue(srv)
+            self.ServerConfig.meta.NOTREADY = False
+        else:
+            self.ServerConfig.meta.NOTREADY = True
 
     def propagateDirty(self, slot, subindex, roi):
         pass

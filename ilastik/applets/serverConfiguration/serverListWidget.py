@@ -3,6 +3,8 @@ from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout
 
 from ilastik.shell.gui.iconMgr import ilastikIcons
 
+from . import types
+
 
 class ServerListWidget(QWidget):
     """
@@ -30,6 +32,11 @@ class ServerListWidget(QWidget):
         layout.addWidget(self.addBtn)
         layout.addWidget(self.rmBtn)
 
+    def selectServer(self, serverId):
+        idx = self._model.findServer(serverId)
+        if idx is not None:
+            self.srvComboBox.setCurrentIndex(idx)
+
     def _add(self) -> None:
         if self._model:
             idx = self._model.addNewEntry()
@@ -55,8 +62,9 @@ class ServerListModel(QAbstractListModel):
     def __init__(self, parent=None, conf_store=None):
         super().__init__(parent)
         self._conf_store = conf_store
-        self._data = list(self._conf_store.get_servers().values())
-        print("DATA", self._data)
+        self._data = self._conf_store.get_servers()
+        if not self._data:
+            self._data = [types.ServerConfig.default()]
 
     def rowCount(self, index: QModelIndex = QModelIndex()):
         return len(self._data)
@@ -66,7 +74,7 @@ class ServerListModel(QAbstractListModel):
 
     def addNewEntry(self):
         self.beginInsertRows(QModelIndex(), len(self._data), len(self._data) + 1)
-        self._data.append({"name": "Unknown"})
+        self._data.append(types.ServerConfig.default())
         self.endInsertRows()
         return len(self._data) - 1
 
@@ -75,6 +83,12 @@ class ServerListModel(QAbstractListModel):
             self.beginRemoveRows(QModelIndex(), row, row)
             del self._data[row]
             self.endRemoveRows()
+
+    def findServer(self, serverId):
+        for idx, srv in enumerate(self._data):
+            if srv.id == serverId:
+                return idx
+        return None
 
     def flags(self, index):
         flags = super().flags(index)
@@ -99,11 +113,11 @@ class ServerListModel(QAbstractListModel):
         row = index.row()
 
         if role == Qt.DisplayRole:
-            return self._data[row]["name"]
+            return self._data[row].name
         elif role == Qt.EditRole:
             return self._data[row]
 
     def submit(self):
         self._conf_store.store(self._data)
-        self._data = list(self._conf_store.get_servers().values())
+        self._data = self._conf_store.get_servers()
         return True

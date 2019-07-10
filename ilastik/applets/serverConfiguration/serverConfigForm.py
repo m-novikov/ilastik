@@ -7,6 +7,8 @@ from PyQt5.Qt import Qt, QStringListModel, pyqtProperty, QListWidgetItem, pyqtSi
 from PyQt5.QtCore import QStateMachine, QState, QSignalTransition, pyqtSignal
 from PyQt5.QtWidgets import QWidget, QComboBox, QLabel, QLineEdit, QListWidget
 
+from . import types
+
 
 class ServerConfigForm(QWidget):
     nameEdit: QLineEdit
@@ -24,16 +26,14 @@ class ServerConfigForm(QWidget):
 
     gotDevices = pyqtSignal()
 
-    # TODO MAKE RELATIVE
     UI_FILE = "serverConfigForm.ui"
 
-    @pyqtProperty(dict, user=True)
+    @pyqtProperty(object, user=True)
     def config(self):
         return self._config
 
     @config.setter
     def config(self, value):
-        print("SETTING CONFIG TO", value)
         self._config = value
         self._updateFieldsFromConfig()
 
@@ -41,9 +41,10 @@ class ServerConfigForm(QWidget):
         super().__init__(None)
         self._initUI()
 
-        self._config = {}
+        self._config = types.ServerConfig.default()
         self._device_getter = device_getter
         self._updating = False
+        self._setRemoteFieldsVisibility(False)
 
     @property
     def _ui_path(self):
@@ -55,7 +56,7 @@ class ServerConfigForm(QWidget):
         Load the ui file for the central widget.
         """
         uic.loadUi(self._ui_path, self)
-        self.typeList.setModel(QStringListModel(["remote", "local"]))
+        self.typeList.setModel(QStringListModel(types.SERVER_TYPES))
 
         # Trigger state updates
         self.nameEdit.textChanged.connect(self._updateConfigFromFields)
@@ -98,17 +99,17 @@ class ServerConfigForm(QWidget):
 
     def _setDevicesFromConfig(self):
         self.deviceList.clear()
-        for checked, id_, name in self.config.get("devices", []):
-            item = DeviceListWidgetItem(id_, name, self.deviceList)
-            item.setCheckState(checked)
+        for dev in self.config.devices:
+            item = DeviceListWidgetItem(dev.id, dev.name, self.deviceList)
+            item.setCheckState(dev.enabled)
 
     def _setDevices(self):
-        current_devices = self.config.get("devices", [])
+        current_devices = self.config.devices
 
         def get_device_state(id_):
             for dev in current_devices:
-                if dev[1] == id_:
-                    return dev[0]
+                if dev.id == id_:
+                    return dev.enabled
             return False
 
         devices = self._device_getter(self._config)
@@ -117,16 +118,22 @@ class ServerConfigForm(QWidget):
 
         for id_, name in devices:
             state = get_device_state(id_)
-            new_devices.append((state, id_, name))
+            new_devices.append(types.Device(id=id_, name=name, enabled=state))
 
-        self.config = {**self.config, "devices": new_devices}
+        self._config = self.config.evolve(devices=new_devices)
+        self._updateFieldsFromConfig()
         self.gotDevices.emit()
 
     def _getDevices(self):
         result = []
         for idx in range(self.deviceList.count()):
             item = self.deviceList.item(idx)
-            result.append((bool(item.checkState()), item.id, item.name))
+            result.append(types.Device(
+                id=item.id,
+                name=item.name,
+                enabled=bool(item.checkState())
+            ))
+
         return result
 
     @contextmanager
@@ -140,24 +147,24 @@ class ServerConfigForm(QWidget):
         if self._updating:
             return
 
-        self._config["name"] = self.nameEdit.text()
-        self._config["address"] = self.addressEdit.text()
-        self._config["type"] = self.typeList.currentText()
-        self._config["port1"] = self.port1Edit.text()
-        self._config["port2"] = self.port2Edit.text()
-        self._config["username"] = self.usernameEdit.text()
-        self._config["ssh_key"] = self.sshKeyEdit.text()
-        self._config["devices"] = self._getDevices()
+        self._config.name = self.nameEdit.text()
+        self._config.address = self.addressEdit.text()
+        self._config.type = self.typeList.currentText()
+        self._config.port1 = self.port1Edit.text()
+        self._config.port2 = self.port2Edit.text()
+        self._config.username = self.usernameEdit.text()
+        self._config.ssh_key = self.sshKeyEdit.text()
+        self._config.devices = self._getDevices()
 
     def _updateFieldsFromConfig(self):
         with self._batch_update_fields():
-            self.nameEdit.setText(self._config.get("name", ""))
-            self.addressEdit.setText(self._config.get("address", ""))
-            self.typeList.setCurrentText(self._config.get("type", ""))
-            self.port1Edit.setText(self._config.get("port1", ""))
-            self.port2Edit.setText(self._config.get("port2", ""))
-            self.usernameEdit.setText(self._config.get("username", ""))
-            self.sshKeyEdit.setText(self._config.get("ssh_key", ""))
+            self.nameEdit.setText(self._config.name)
+            self.addressEdit.setText(self._config.address)
+            self.typeList.setCurrentText(self._config.type)
+            self.port1Edit.setText(self._config.port1)
+            self.port2Edit.setText(self._config.port2)
+            self.usernameEdit.setText(self._config.username)
+            self.sshKeyEdit.setText(self._config.ssh_key)
             self._setDevicesFromConfig()
 
     def keyPressEvent(self, event):
@@ -219,6 +226,10 @@ class ServerFormWorkflow:
                 return True
 
         return False
+
+    def restart(self):
+        self._machine.stop()
+        self._machine.stopped.connect(self._machine.start)
 
     def _make_initial_state(self, form) -> QState:
         s = QState()

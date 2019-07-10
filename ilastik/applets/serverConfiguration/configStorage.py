@@ -1,6 +1,10 @@
-import attr
+import typing
 
 from configparser import ConfigParser
+
+import attr
+
+from ilastik import config
 
 from . import types
 
@@ -62,6 +66,13 @@ class ServerConfigStorage:
 
         return res
 
+    def get_server(self, id_) -> typing.Optional[types.ServerConfig]:
+        for srv in self.get_servers():
+            if srv.id == id_:
+                return srv
+
+        return None
+
     def _server_as_dict(self, srv):
         return attr.asdict(srv)
 
@@ -112,3 +123,6 @@ class ServerConfigStorage:
                 self._config.write(out)
         else:
             self._config.write(self._dst)
+
+
+SERVER_CONFIG = ServerConfigStorage(config.cfg, config.CONFIG_PATH)
