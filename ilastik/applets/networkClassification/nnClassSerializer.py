@@ -56,7 +56,7 @@ class NNClassificationSerializer(AppletSerializer):
             ),
             SerialModelSlot(topLevelOperator.Model),
             SerialModelStateSlot(topLevelOperator.ModelState),
-            SerialListModelStateSlot(topLevelOperator.Checkpoints, version=4),
+            SerialListModelStateSlot(topLevelOperator.Checkpoints),
         ]
 
         super().__init__(projectFileGroupName, slots)
@@ -84,8 +84,11 @@ class SerialModelSlot(SerialSlot):
             slot.setValue(Model.Empty)
             return
 
-        model = Model(code=code, config=json.loads(maybe_get_value(dset, "config", b"")))
-        slot.setValue(model)
+        try:
+            model = Model(code=code, config=json_loads_binary(maybe_get_value(dset, "config", b"")))
+            slot.setValue(model)
+        except Exception:
+            slot.setValue(Model.Empty)
 
 
 class ModelStateSerializer:
@@ -104,10 +107,7 @@ class ModelStateSerializer:
         if state.optimizer_state:
             group.create_dataset(cls.OPTIMIZER, data=np.void(state.optimizer_state))
 
-        metadata = {
-            "loss": state.loss,
-            "epoch": state.epoch,
-        }
+        metadata = {"loss": state.loss, "epoch": state.epoch}
 
         group.create_dataset(cls.META, data=np.void(json_dumps_binary(metadata)))
 
@@ -117,11 +117,7 @@ class ModelStateSerializer:
         optimizer = maybe_get_value(group, cls.OPTIMIZER, b"")
         metadata = json_loads_binary(maybe_get_value(group, cls.META, b"{}"))
 
-        return ModelState(
-            model_state=bytes(model),
-            optimizer_state=bytes(optimizer),
-            **metadata
-        )
+        return ModelState(model_state=bytes(model), optimizer_state=bytes(optimizer), **metadata)
 
 
 class SerialModelStateSlot(SerialSlot):
@@ -147,12 +143,12 @@ class SerialListModelStateSlot(SerialSlot):
             state_group = model_group.require_group(str(idx))
             ModelStateSerializer.dump_model_state(state_group, state)
 
-        model_group.attrs['length'] = len(states)
+        model_group.attrs["length"] = len(states)
 
     def _getValue(self, dset, slot):
         states = []
 
-        for idx in range(dset.attrs['length']):
+        for idx in range(dset.attrs["length"]):
             state_group = dset[str(idx)]
             model_state = ModelStateSerializer.load_model_state(state_group)
             states.append(model_state)
