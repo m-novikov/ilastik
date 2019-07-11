@@ -32,6 +32,7 @@ from lazyflow.utility.orderedSignal import OrderedSignal
 from ilastik.utility.maybe import maybe
 from ilastik.utility.commandLineProcessing import convertStringToList
 import os
+import json
 import sys
 import re
 import tempfile
