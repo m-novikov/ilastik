@@ -38,10 +38,9 @@ class OpServerConfig(Operator):
     def setupOutputs(self):
         serverId = self.ServerId.value
         srv = SERVER_CONFIG.get_server(serverId)
-        print("SEtTING New<<", srv)
         if srv:
-            self.ServerConfig.setValue(srv)
             self.ServerConfig.meta.NOTREADY = False
+            self.ServerConfig.setValue(srv)
         else:
             self.ServerConfig.meta.NOTREADY = True
 

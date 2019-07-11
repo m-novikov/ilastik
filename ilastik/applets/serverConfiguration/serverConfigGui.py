@@ -66,16 +66,13 @@ class ServerConfigGui(QWidget):
         super().__init__()
         self.parentApplet = parentApplet
         self.topLevelOp = topLevelOperatorView
-        self.topLevelOp.ServerId.notifyValueChanged(self.notifyValueChanged)
         self._centralWidget = self._makeServerConfigWidget(self.getServerIdFromOp())
-        self._centralWidget.currentConfigChanged.connect(self._indexChanged)
+        self._centralWidget.saved.connect(self._serverSelected)
         self._initAppletDrawer()
 
-    def _indexChanged(self, srv):
-        self.topLevelOp.ServerId.setValue(srv.id)
-
-    def notifyValueChanged(self, *args, **kwargs):
-        print("VALUE CHANGED", args, kwargs)
+    def _serverSelected(self):
+        self.topLevelOp.ServerId.disconnect()
+        self.topLevelOp.ServerId.setValue(self._centralWidget.currentServerId())
 
     def _makeServerConfigWidget(self, serverId):
         w = ServerConfigurationEditor()
@@ -158,6 +155,9 @@ class ServerConfigurationEditor(QWidget):
         data = self._model.index(idx).data(role=Qt.EditRole)
         self.currentConfigChanged.emit(data)
 
+    def currentServerId(self):
+        return self._srv_list.currentServerId()
+
     def setModel(self, model):
         self._model = model
         self._srv_list.setModel(model)
@@ -171,6 +171,7 @@ class ServerConfigurationEditor(QWidget):
 
         self._mapper.setSubmitPolicy(QDataWidgetMapper.ManualSubmit)
         self._srv_form.saveBtn.clicked.connect(self._mapper.submit)
+        self._srv_form.saveBtn.clicked.connect(self.saved)
 
         self._srv_list.currentIndexChanged.connect(self._mapper.setCurrentIndex)
         self._srv_list.currentIndexChanged.connect(self._selectedServer)

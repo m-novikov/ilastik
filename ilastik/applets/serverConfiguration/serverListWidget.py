@@ -1,3 +1,5 @@
+import typing
+
 from PyQt5.Qt import QIcon, Qt, QModelIndex, QAbstractListModel
 from PyQt5.QtWidgets import QWidget, QComboBox, QToolButton, QHBoxLayout
 
@@ -53,6 +55,12 @@ class ServerListWidget(QWidget):
     @property
     def currentIndexChanged(self):
         return self.srvComboBox.currentIndexChanged
+
+    def currentServerId(self) -> typing.Optional[str]:
+        # FIXME: Is it proper place to retrieve serverId? View vs model
+        srv = self._model.index(self.srvComboBox.currentIndex()).data(role=Qt.EditRole)
+        if srv:
+            return srv.id
 
     def currentIndex(self) -> int:
         return self.srvComboBox.currentIndex()
