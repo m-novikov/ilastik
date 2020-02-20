@@ -61,24 +61,21 @@ class ServerConfigGui(QWidget):
         return None
 
     def getServerIdFromOp(self):
-        if self.topLevelOp.ServerId.ready():
-            return self.topLevelOp.ServerId.value
-        return None
+        raise Exception("WHY")
 
     def __init__(self, parentApplet, topLevelOperatorView):
         super().__init__()
         self.parentApplet = parentApplet
-        self.topLevelOp = topLevelOperatorView
-        self._centralWidget = self._makeServerConfigWidget(self.getServerIdFromOp())
+        self._server_connector = parentApplet._server_connector
+        self._centralWidget = self._makeServerConfigWidget(self._server_connector.server_id)
         self._centralWidget.saved.connect(self._serverSelected)
         self._initAppletDrawer()
 
     def _serverSelected(self):
-        self.topLevelOp.ServerId.disconnect()
-        self.topLevelOp.ServerId.setValue(self._centralWidget.currentServerId())
+        self._server_connector.use(server_id=self._centralWidget.currentServerId())
 
     def _makeServerConfigWidget(self, serverId):
-        w = ServerConfigurationEditor()
+        w = ServerConfigurationEditor(server_connector=self._server_connector)
         srv_storage = ServerConfigStorage(config.cfg, dst=config.CONFIG_PATH)
         w.setModel(ServerListModel(conf_store=srv_storage))
         w.selectServer(serverId)
@@ -147,10 +144,10 @@ class ServerConfigurationEditor(QWidget):
     currentConfigChanged = pyqtSignal(object)
     saved = pyqtSignal()
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, server_connector) -> None:
         super().__init__(parent)
         self._srv_list = ServerListWidget()
-        self._srv_form = ServerConfigForm(_fetch_devices)
+        self._srv_form = ServerConfigForm(server_connector=server_connector)
         self._workflow = ServerFormWorkflow(self._srv_form)
         self._model = None
         layout = QVBoxLayout(self)

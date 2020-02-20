@@ -23,11 +23,12 @@ from .opServerConfig import OpServerConfig
 from .serverConfigSerializer import ServerConfigSerializer
 
 class ServerConfigApplet(StandardApplet):
-    def __init__(self, workflow):
+    def __init__(self, workflow, *, server_connector):
         self._topLevelOperator = OpServerConfig(parent=workflow)
         super().__init__("Server configuration", workflow)
         self._serializableItems = [ServerConfigSerializer('ServerConfiguration', operator=self._topLevelOperator)]
         self._topLevelOperator.ServerConfig.notifyReady(self._requestUpdate)
+        self._server_connector = server_connector
 
     def _requestUpdate(self, *args, **kwargs):
         self.appletStateUpdateRequested()

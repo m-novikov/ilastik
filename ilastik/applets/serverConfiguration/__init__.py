@@ -19,3 +19,4 @@
 #		   http://ilastik.org/license.html
 ###############################################################################
 from .serverConfigApplet import ServerConfigApplet
+from .configStorage import SERVER_CONFIG

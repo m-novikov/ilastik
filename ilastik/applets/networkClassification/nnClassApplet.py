@@ -29,7 +29,7 @@ class NNClassApplet(StandardApplet):
     StandartApplet Subclass with SingleLangeGui and SingeLaneOperator
     """
 
-    def __init__(self, workflow, projectFileGroupName):
+    def __init__(self, workflow, projectFileGroupName, *, server_connector):
         self._topLevelOperator = OpNNClassification(parent=workflow)
 
         def on_classifier_changed(slot, roi):
@@ -56,6 +56,7 @@ class NNClassApplet(StandardApplet):
         # If we start reporting progress for multiple tasks that might occur simulatneously,
         # we'll need to aggregate the progress updates.
         self._topLevelOperator.opTrain.progressSignal.subscribe(self.progressSignal)
+        self._server_connector = server_connector
 
     @property
     def dataSerializers(self):

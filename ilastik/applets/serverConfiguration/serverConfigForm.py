@@ -37,12 +37,12 @@ class ServerConfigForm(QWidget):
         self._config = value
         self._updateFieldsFromConfig()
 
-    def __init__(self, device_getter) -> None:
+    def __init__(self, *, server_connector) -> None:
         super().__init__(None)
         self._initUI()
 
         self._config = types.ServerConfig.default()
-        self._device_getter = device_getter
+        self._srv_conn = server_connector
         self._updating = False
         self._setRemoteFieldsVisibility(False)
 
@@ -113,7 +113,10 @@ class ServerConfigForm(QWidget):
                     return dev.enabled
             return False
 
-        devices = self._device_getter(self._config)
+        print("CONNECT")
+        conn = self._srv_conn.connect(self._config)
+        print("DONE")
+        devices = conn.list_devices()
 
         new_devices = []
 

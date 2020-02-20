@@ -26,16 +26,49 @@ import numpy
 
 from ilastik.workflow import Workflow
 from ilastik.applets.dataSelection import DataSelectionApplet
-from ilastik.applets.serverConfiguration import ServerConfigApplet
+from ilastik.applets.serverConfiguration import ServerConfigApplet, SERVER_CONFIG
 from ilastik.applets.networkClassification import NNClassApplet, NNClassificationDataExportApplet
 from ilastik.applets.batchProcessing import BatchProcessingApplet
 
 from lazyflow.operators.opReorderAxes import OpReorderAxes
+from lazyflow.operators.tiktorch import TikTorchLazyflowClassifierFactory
 
 from lazyflow.graph import Graph
 
 
 logger = logging.getLogger(__name__)
+
+
+class ServerConnector:
+    def __init__(self) -> None:
+        self._config_store = SERVER_CONFIG
+
+        self._server_id = None
+        self._server_id_slot = None
+        self._connection = None
+
+    def use_server_id_slot(self, slot):
+        assert self._server_id_slot is None, "server_id_slot is already set"
+        self._server_id_slot = slot
+        if slot.ready():
+            self._server_id = self._server_id_slot.value
+
+    @property
+    def server_id(self):
+        return self._server_id
+
+    def use(self, *, server_id):
+        assert self._server_id_slot is not None, "Please configure server_id_slot before using this instance"
+        self._server_id = server_id
+        self._server_id.setValue(value)
+
+    def connect(self, config=None):
+        config = config or self._config_store.get_server(self._server_id)
+        if config is None:
+            raise ValueError(f"Cannot connect to server {self._server_id}")
+
+        self._connection = TikTorchLazyflowClassifierFactory(config)
+        return self._connection
 
 
 class NNClassificationWorkflow(Workflow):
@@ -75,6 +108,7 @@ class NNClassificationWorkflow(Workflow):
         )
         self._applets = []
         self._workflow_cmdline_args = workflow_cmdline_args
+        self._server_connector = ServerConnector()
 
         # Parse workflow-specific command-line args
         parser = argparse.ArgumentParser()
@@ -104,9 +138,9 @@ class NNClassificationWorkflow(Workflow):
         # see role constants, above
         opDataSelection.DatasetRoles.setValue(NNClassificationWorkflow.ROLE_NAMES)
 
-        self.serverConfigApplet = ServerConfigApplet(self)
+        self.serverConfigApplet = ServerConfigApplet(self, server_connector=self._server_connector)
 
-        self.nnClassificationApplet = NNClassApplet(self, "NNClassApplet")
+        self.nnClassificationApplet = NNClassApplet(self, "NNClassApplet", server_connector=self._server_connector)
         opClassify = self.nnClassificationApplet.topLevelOperator
 
         self.dataExportApplet = NNClassificationDataExportApplet(self, "Data Export")
@@ -236,6 +270,9 @@ class NNClassificationWorkflow(Workflow):
         (This workflow's headless mode supports only batch mode for now.)
         """
         # Headless batch mode.
+        print("HEY")
+        self._server_connector.use_server_id_slot(self.serverConfigApplet.topLevelOperator.ServerId)
+
         if self._headless and self._batch_input_args and self._batch_export_args:
             raise NotImplementedError("headless networkclassification not implemented yet!")
             self.dataExportApplet.configure_operator_with_parsed_args(self._batch_export_args)
