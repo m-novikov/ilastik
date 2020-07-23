@@ -75,3 +75,13 @@ class ServerConfig:
         for dev in value:
             if not isinstance(dev, Device):
                 raise ValueError("devices entries should be instance of Device class")
+
+
+class IConnection:
+    def get_devices(self):
+        raise NotImplementedError()
+
+
+class IConnectionFactory:
+    def ensure_connection(self) -> IConnection:
+        pass
