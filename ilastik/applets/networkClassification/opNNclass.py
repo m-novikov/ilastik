@@ -47,8 +47,8 @@ _NO_MODEL = object()
 class OpModel(Operator):
     ModelBinary = InputSlot(stype=stype.Opaque)
     ServerConfig = InputSlot(stype=stype.Opaque)
-
     TiktorchModel = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+
     def __init__(self, *args, connectionFactory, **kwargs):
         super().__init__(*args, **kwargs)
         self._connectionFactory = connectionFactory
@@ -118,7 +118,6 @@ class OpNNClassification(Operator):
     NumClasses = InputSlot(optional=True)
     LabelInputs = InputSlot(optional=True, level=1)
     FreezePredictions = InputSlot(stype="bool", value=False, nonlane=True)
-    #ClassifierFactory = InputSlot()
     ModelBinary = InputSlot(stype=stype.Opaque, nonlane=True)
     ModelSession = InputSlot()
 
@@ -194,7 +193,6 @@ class OpNNClassification(Operator):
         self.opModel.ModelBinary.connect(self.ModelBinary)
 
         self.ModelSession.connect(self.opModel.TiktorchModel)
-        #self.ClassifierFactory.connect(self.opModel.TiktorchFactory)
 
         # Hook up Labeling Pipeline
         self.opLabelPipeline = OpMultiLaneWrapper(OpLabelPipeline, parent=self, broadcastingSlotNames=["DeleteLabel"])
