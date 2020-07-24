@@ -37,7 +37,6 @@ from lazyflow.graph import Graph
 
 logger = logging.getLogger(__name__)
 
-
 class NNClassificationWorkflow(Workflow):
     """
     Workflow for the Neural Network Classification Applet
@@ -106,7 +105,7 @@ class NNClassificationWorkflow(Workflow):
 
         self.serverConfigApplet = ServerConfigApplet(self)
 
-        self.nnClassificationApplet = NNClassApplet(self, "NNClassApplet")
+        self.nnClassificationApplet = NNClassApplet(self, "NNClassApplet", connectionFactory=self.serverConfigApplet.connectionFactory)
         opClassify = self.nnClassificationApplet.topLevelOperator
 
         self.dataExportApplet = NNClassificationDataExportApplet(self, "Data Export")

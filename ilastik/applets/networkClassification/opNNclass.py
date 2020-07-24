@@ -27,7 +27,6 @@ from lazyflow.operators import OpMultiArraySlicer2, OpValueCache, OpBlockedArray
 from lazyflow.operators.tiktorch import (
     OpTikTorchTrainClassifierBlocked,
     OpTikTorchClassifierPredict,
-    TikTorchLazyflowClassifierFactory,
 )
 from ilastik.utility.operatorSubView import OperatorSubView
 from ilastik.utility import OpMultiLaneWrapper
@@ -42,48 +41,17 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class OpTiktorchFactory(Operator):
-    ServerConfig = InputSlot(stype=stype.Opaque)
-    Tiktorch = OutputSlot(stype=stype.Opaque)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__conf = None
-
-    def setupOutputs(self):
-        if self.__conf is not None:
-            if self.ServerConfig.value == self.__conf:
-                return
-
-        self.Tiktorch.meta.NOTREADY = False
-        try:
-            tiktorch = TikTorchLazyflowClassifierFactory(self.ServerConfig.value)
-        except Exception as e:
-            logger.exception("Could not start Tiktorch server with %s", self.ServerConfig.value)
-            self.Tiktorch.meta.NOTREADY = True
-        else:
-            self.__conf = self.ServerConfig.value
-            if self.Tiktorch.ready():
-                # shutdown previous server
-                self.Tiktorch.value.shutdown()
-
-            self.Tiktorch.disconnect()
-            self.Tiktorch.setValue(tiktorch)
-
-    def propagateDirty(self, slot, subindex, roi):
-        # self.Tiktorch.setDirty(slice(None))
-        pass
-
-
 _NO_MODEL = object()
 
 
 class OpModel(Operator):
-    TiktorchFactory = InputSlot(stype=stype.Opaque)
     ModelBinary = InputSlot(stype=stype.Opaque)
     ServerConfig = InputSlot(stype=stype.Opaque)
 
     TiktorchModel = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    def __init__(self, *args, connectionFactory, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._connectionFactory = connectionFactory
 
     def _close_model(self):
         if not self.TiktorchModel.ready():
@@ -97,7 +65,7 @@ class OpModel(Operator):
         model.close()
 
     def setupOutputs(self):
-        tiktorch = self.TiktorchFactory.value
+        tiktorch = self._connectionFactory.ensure_connection(self.ServerConfig.value)
         model_binary = self.ModelBinary.value
         if not model_binary:
             self._close_model()
@@ -150,7 +118,7 @@ class OpNNClassification(Operator):
     NumClasses = InputSlot(optional=True)
     LabelInputs = InputSlot(optional=True, level=1)
     FreezePredictions = InputSlot(stype="bool", value=False, nonlane=True)
-    ClassifierFactory = InputSlot()
+    #ClassifierFactory = InputSlot()
     ModelBinary = InputSlot(stype=stype.Opaque, nonlane=True)
     ModelSession = InputSlot()
 
@@ -197,11 +165,12 @@ class OpNNClassification(Operator):
         except Exception as e:
             logger.warning(e)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, connectionFactory, **kwargs):
         """
         Instantiate all internal operators and connect them together.
         """
         super(OpNNClassification, self).__init__(*args, **kwargs)
+        self._connectionFactory = connectionFactory
 
         # Default values for some input slots
         self.FreezePredictions.setValue(True)
@@ -220,16 +189,12 @@ class OpNNClassification(Operator):
         self.opBlockShape.RawImage.connect(self.InputImages)
         self.opBlockShape.ModelSession.connect(self.ModelSession)
 
-        self.opTiktorchFactory = OpTiktorchFactory(parent=self.parent)
-        self.opTiktorchFactory.ServerConfig.connect(self.ServerConfig)
-
-        self.opModel = OpModel(parent=self.parent)
+        self.opModel = OpModel(parent=self.parent, connectionFactory=connectionFactory)
         self.opModel.ServerConfig.connect(self.ServerConfig)
-        self.opModel.TiktorchFactory.connect(self.opTiktorchFactory.Tiktorch)
         self.opModel.ModelBinary.connect(self.ModelBinary)
 
         self.ModelSession.connect(self.opModel.TiktorchModel)
-        self.ClassifierFactory.connect(self.opModel.TiktorchFactory)
+        #self.ClassifierFactory.connect(self.opModel.TiktorchFactory)
 
         # Hook up Labeling Pipeline
         self.opLabelPipeline = OpMultiLaneWrapper(OpLabelPipeline, parent=self, broadcastingSlotNames=["DeleteLabel"])

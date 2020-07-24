@@ -436,7 +436,7 @@ class NNClassGui(LabelingGui):
         self.parentApplet = parentApplet
         self.classifiers = OrderedDict()
 
-        has_classifier_factory = self.topLevelOperatorView.ClassifierFactory.ready()
+        has_classifier_factory = True #self.topLevelOperatorView.ClassifierFactory.ready()
         self.liveTraining = False
         self.livePrediction = False
 

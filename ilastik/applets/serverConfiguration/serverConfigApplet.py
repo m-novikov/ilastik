@@ -28,68 +28,7 @@ from . import types
 
 logger = logging.getLogger(__name__)
 
-import grpc
-from tiktorch.launcher import LocalServerLauncher, RemoteSSHServerLauncher, SSHCred
-from tiktorch.launcher import ConnConf
-import socket
-import inference_pb2_grpc, inference_pb2
-
-
-class _NullLauncher:
-    def start(self):
-        pass
-
-    def stop(self):
-        pass
-
-
-class TiktorchConnectionFactory(types.IConnectionFactory):
-    class _TiktorchConnection(types.IConnection):
-        def __init__(self, config):
-            self._config = config
-
-        def get_devices(self):
-            config = self._config
-            try:
-                port = config.port
-                if config.autostart:
-                    # in order not to block address for real server todo: remove port hack
-                    port = str(int(config.port) - 20)
-
-                addr = socket.gethostbyname(self._config.address)
-                conn_conf = ConnConf(addr, port, timeout=10)
-
-                if config.autostart:
-                    if addr == "127.0.0.1":
-                        launcher = LocalServerLauncher(conn_conf, path=config.path)
-                    else:
-                        launcher = RemoteSSHServerLauncher(
-                            conn_conf, cred=SSHCred(user=config.username, key_path=config.ssh_key), path=config.path
-                        )
-                else:
-                    launcher = _NullLauncher()
-
-                try:
-                    launcher.start()
-                    with grpc.insecure_channel(f"{addr}:{port}") as chan:
-                        client = inference_pb2_grpc.InferenceStub(chan)
-                        resp = client.ListDevices(inference_pb2.Empty())
-                        return [(d.id, d.id) for d in resp.devices]
-                except Exception as e:
-                    logger.exception('Failed to fetch devices')
-                    raise
-                finally:
-                    try:
-                        launcher.stop()
-                    except Exception:
-                        pass
-
-            except Exception as e:
-                logger.error(e)
-                raise
-
-    def ensure_connection(self, config=None) -> types.IConnection:
-        return self._TiktorchConnection(config)
+from lazyflow.operators import tiktorch
 
 
 class ServerConfigApplet(StandardApplet):
@@ -99,7 +38,7 @@ class ServerConfigApplet(StandardApplet):
         self._serializableItems = [ServerConfigSerializer('ServerConfiguration', operator=self._topLevelOperator)]
         self._topLevelOperator.ServerConfig.notifyReady(self._requestUpdate)
         self._topLevelOperator.ServerConfig.notifyValueChanged(self._configChanged)
-        self._connectionFactory = TiktorchConnectionFactory()
+        self._connectionFactory = tiktorch.classifier.TiktorchConnectionFactory()
 
     def _configChanged(self, *args, **kwargs):
         logger.debug("Server config value changed")

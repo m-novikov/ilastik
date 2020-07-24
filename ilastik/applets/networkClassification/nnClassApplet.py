@@ -29,8 +29,8 @@ class NNClassApplet(StandardApplet):
     StandartApplet Subclass with SingleLangeGui and SingeLaneOperator
     """
 
-    def __init__(self, workflow, projectFileGroupName):
-        self._topLevelOperator = OpNNClassification(parent=workflow)
+    def __init__(self, workflow, projectFileGroupName, connectionFactory):
+        self._topLevelOperator = OpNNClassification(parent=workflow, connectionFactory=connectionFactory)
 
         def on_classifier_changed(slot, roi):
             if (
