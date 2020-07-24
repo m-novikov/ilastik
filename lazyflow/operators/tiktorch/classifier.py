@@ -292,5 +292,3 @@ class TiktorchConnectionFactory(_base.IConnectionFactory):
                 self.launcher.stop()
             except AttributeError:
                 pass
-
-TikTorchLazyflowClassifierFactory = TiktorchConnectionFactory

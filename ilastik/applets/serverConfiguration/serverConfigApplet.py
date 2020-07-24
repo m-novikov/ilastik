@@ -23,8 +23,6 @@ import logging
 from ilastik.applets.base.standardApplet import StandardApplet
 from .opServerConfig import OpServerConfig
 from .serverConfigSerializer import ServerConfigSerializer
-from . import types
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +30,13 @@ from lazyflow.operators import tiktorch
 
 
 class ServerConfigApplet(StandardApplet):
-    def __init__(self, workflow):
+    def __init__(self, workflow, *, connectionFactory: tiktorch.IConnectionFactory):
         self._topLevelOperator = OpServerConfig(parent=workflow)
         super().__init__("Server configuration", workflow)
         self._serializableItems = [ServerConfigSerializer('ServerConfiguration', operator=self._topLevelOperator)]
         self._topLevelOperator.ServerConfig.notifyReady(self._requestUpdate)
         self._topLevelOperator.ServerConfig.notifyValueChanged(self._configChanged)
-        self._connectionFactory = tiktorch.classifier.TiktorchConnectionFactory()
+        self._connectionFactory = connectionFactory
 
     def _configChanged(self, *args, **kwargs):
         logger.debug("Server config value changed")
@@ -47,7 +45,7 @@ class ServerConfigApplet(StandardApplet):
         self.appletStateUpdateRequested()
 
     @property
-    def connectionFactory(self) -> types.IConnectionFactory:
+    def connectionFactory(self) -> tiktorch.IConnectionFactory:
         return self._connectionFactory
 
     @property
