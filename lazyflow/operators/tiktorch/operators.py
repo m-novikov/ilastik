@@ -171,6 +171,7 @@ class OpTikTorchClassifierPredict(Operator):
 
     def setupOutputs(self):
         assert self.Image.meta.getAxisKeys()[-1] == "c"
+        print("LABEL COUNT", self.LabelsCount.ready())
         nlabels = max(self.LabelsCount.value, 1)
         self.PMaps.meta.assignFrom(self.Image.meta)
         self.PMaps.meta.dtype = numpy.float32

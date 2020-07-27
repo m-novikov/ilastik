@@ -22,6 +22,7 @@ from functools import partial
 import numpy
 
 from lazyflow.graph import Operator, InputSlot, OutputSlot
+from lazyflow.request import RequestLock
 from lazyflow import stype, rtype
 from lazyflow.operators import OpMultiArraySlicer2, OpValueCache, OpBlockedArrayCache
 from lazyflow.operators.tiktorch import (
@@ -48,53 +49,67 @@ class OpModel(Operator):
     ModelBinary = InputSlot(stype=stype.Opaque)
     ServerConfig = InputSlot(stype=stype.Opaque)
     TiktorchModel = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
+    NumClasses = OutputSlot(stype=stype.Opaque, rtype=rtype.Everything)
 
     def __init__(self, *args, connectionFactory, **kwargs):
         super().__init__(*args, **kwargs)
         self._connectionFactory = connectionFactory
+        self._lock = RequestLock()
+        self._model = None
 
     def _close_model(self):
-        if not self.TiktorchModel.ready():
+        if not self._model:
             return
 
-        model = self.TiktorchModel.value
+        try:
+            self._model.close()
+        except Exception:
+            logger.exception("Failed to close model session")
+        finally:
+            self._model = None
 
-        if model is _NO_MODEL:
-            return
+    def _execute_TiktorchModel(self):
+        if self._model is not None:
+            return self._model
 
-        model.close()
-
-    def setupOutputs(self):
-        tiktorch = self._connectionFactory.ensure_connection(self.ServerConfig.value)
         model_binary = self.ModelBinary.value
         if not model_binary:
-            self._close_model()
-            self.TiktorchModel.meta.NOTREADY = True
-            self.TiktorchModel.setValue(_NO_MODEL)
-            return
-        devices = self.ServerConfig.value.devices
+            return _NO_MODEL
 
-        session = None
-        try:
-            session = tiktorch.create_model_session(model_binary, [d.id for d in devices if d.enabled])
-        except Exception:
-            logger.exception("Failed to create session")
+        with self._lock:
+            if self._model is not None:
+                return self._model
 
-        if session is not None:
-            self.TiktorchModel.setValue(session)
+            devices = self.ServerConfig.value.devices
+
             try:
-                projectManager = self._parent._shell.projectManager
-                applet = self._parent._applets[2]
-                assert applet.name == "NN Training"
-                # restore labels  # todo: clean up this workaround for resetting the user label block shape
-                top_group_name = applet.dataSerializers[0].topGroupName
-                group_name = "LabelSets"
-                label_serial_block_slot = [s for s in applet.dataSerializers[0].serialSlots if s.name == group_name][0]
-                label_serial_block_slot.deserialize(projectManager.currentProjectFile[top_group_name])
-            except:
-                logger.debug("Could not restore labels after setting TikTorchLazyflowClassifierFactory.")
-        else:
+                tiktorch = self._connectionFactory.ensure_connection(self.ServerConfig.value)
+                self._model = tiktorch.create_model_session(model_binary, [d.id for d in devices if d.enabled])
+            except Exception:
+                logger.exception("Failed to create session")
+                return _NO_MODEL
+
+            return self._model
+
+    def execute(self, slot, subindex, roi, result):
+        if slot == self.TiktorchModel:
+            return self._execute_TiktorchModel()
+
+    def setupOutputs(self):
+        self.TiktorchModel.meta.dtype = object
+        self.TiktorchModel.meta.shape = (1,)
+        self.NumClasses.meta.dtype = object
+        self.NumClasses.meta.shape = (1,)
+
+        model_binary = self.ModelBinary.value
+        if not model_binary:
             self.TiktorchModel.meta.NOTREADY = True
+            self.NumClasses.meta.NOTREADY = True
+            self._close_model()
+            return
+        else:
+            self.TiktorchModel.meta.NOTREADY = None
+            self.NumClasses.meta.NOTREADY = None
 
     def propagateDirty(self, slot, subindex, roi):
         self.TiktorchModel.setDirty()
@@ -115,7 +130,7 @@ class OpNNClassification(Operator):
     ServerConfig = InputSlot(stype=stype.Opaque, nonlane=True)
     Checkpoints = InputSlot()
 
-    NumClasses = InputSlot(optional=True)
+    NumClasses = OutputSlot()
     LabelInputs = InputSlot(optional=True, level=1)
     FreezePredictions = InputSlot(stype="bool", value=False, nonlane=True)
     ModelBinary = InputSlot(stype=stype.Opaque, nonlane=True)
@@ -139,24 +154,30 @@ class OpNNClassification(Operator):
     PmapColors = OutputSlot()
 
     def setupOutputs(self):
-        model = self.opModel.TiktorchModel.value
-        if model is _NO_MODEL:
-            self.NumClasses.meta.NOTREADY = True
-            return
-
-        numClasses = len(self.opModel.TiktorchModel.value.known_classes)
-        self.NumClasses.setValue(numClasses)
-        self.opTrain.MaxLabel.setValue(numClasses)
-
+        print("SETUP OUTPUTS", self.PredictionProbabilities.ready())
+        print("SETUP OUTPUTS MODEL SESSIOn", self.ModelSession.ready())
+        print("SETUP OUTPUTS NumClasses", self.NumClasses.ready())
         self.LabelNames.meta.dtype = object
-        self.LabelNames.meta.shape = (numClasses,)
+        self.LabelNames.meta.shape = (1,)
         self.LabelColors.meta.dtype = object
-        self.LabelColors.meta.shape = (numClasses,)
+        self.LabelColors.meta.shape = (1,)
         self.PmapColors.meta.dtype = object
-        self.PmapColors.meta.shape = (numClasses,)
+        self.PmapColors.meta.shape = (1,)
+        # self.NumClasses.meta.dtype = object
+        # self.NumClasses.meta.shape = (1,)
 
         if self.opBlockShape.BlockShapeInference.ready():
             self.opPredictionPipeline.BlockShape.connect(self.opBlockShape.BlockShapeInference)
+
+    # def execute(self, slot, subindex, roi, result):
+    #     print(slot)
+    #     if slot == self.NumClasses:
+    #         print("HEY")
+    #         return len(self.opModel.TiktorchModel.value.known_classes)
+    #     print("HEY 2")
+
+        #self.NumClasses.setValue(numClasses)
+        #self.opTrain.MaxLabel.setValue(numClasses)
 
     def cleanUp(self):
         try:
@@ -170,7 +191,7 @@ class OpNNClassification(Operator):
         """
         super(OpNNClassification, self).__init__(*args, **kwargs)
         self._connectionFactory = connectionFactory
-
+#
         # Default values for some input slots
         self.FreezePredictions.setValue(True)
         self.LabelNames.setValue([])
@@ -193,6 +214,7 @@ class OpNNClassification(Operator):
         self.opModel.ModelBinary.connect(self.ModelBinary)
 
         self.ModelSession.connect(self.opModel.TiktorchModel)
+        self.NumClasses.connect(self.opModel.NumClasses)
 
         # Hook up Labeling Pipeline
         self.opLabelPipeline = OpMultiLaneWrapper(OpLabelPipeline, parent=self, broadcastingSlotNames=["DeleteLabel"])
@@ -405,12 +427,22 @@ class OpBlockShape(Operator):
         super(OpBlockShape, self).__init__(*args, **kwargs)
 
     def setupOutputs(self):
-        if self.ModelSession.value is _NO_MODEL:
-            self.BlockShapeTrain.meta.NOTREADY = True
-            self.BlockShapeInference.meta.NOTREADY = True
-            return
-        self.BlockShapeTrain.setValue(self.setup_train())
-        self.BlockShapeInference.setValue(self.setup_inference())
+        # if self.ModelSession.value is _NO_MODEL:
+        #     self.BlockShapeTrain.meta.NOTREADY = True
+        #     self.BlockShapeInference.meta.NOTREADY = True
+        #     return
+        self.BlockShapeTrain.meta.dtype = object
+        self.BlockShapeTrain.meta.shape = (1,)
+        self.BlockShapeInference.meta.dtype = object
+        self.BlockShapeInference.meta.shape = (1,)
+        # self.BlockShapeTrain.setValue(self.setup_train())
+        # self.BlockShapeInference.setValue(self.setup_inference())
+
+    def execute(self, slot, subindex, roi, result):
+        if slot == self.BlockShapeTrain:
+            return self.setup_train()
+        elif slot == self.BlockShapeInference:
+            return self.setup_inference()
 
     def setup_train(self):
         tikmodel = self.ModelSession.value
@@ -447,9 +479,6 @@ class OpBlockShape(Operator):
             ret,
         )
         return ret
-
-    def execute(self, slot, subindex, roi, result):
-        pass
 
     def propagateDirty(self, slot, subindex, roi):
         self.BlockShapeTrain.setDirty()

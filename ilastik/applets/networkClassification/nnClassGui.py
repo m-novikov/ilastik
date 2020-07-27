@@ -483,7 +483,7 @@ class NNClassGui(LabelingGui):
     def _notifyModelSession(self, slot, roi=None):
         if slot.ready():
             model = slot.value
-            if model is not self.topLevelOperatorView.NO_MODEL:
+            if model and model is not self.topLevelOperatorView.NO_MODEL:
                 self.labelingDrawerUi.addModel.setText(f"{model.name}")
                 self.labelingDrawerUi.closeModel.setVisible(True)
                 self.labelingDrawerUi.closeModel.setVisible(True)
@@ -779,6 +779,9 @@ class NNClassGui(LabelingGui):
 
         if success:
             model = self.topLevelOperatorView.opModel.TiktorchModel.value
+            if model is self.topLevelOperatorView.NO_MODEL:
+                return
+
             num_classes = len(model.known_classes)
             self.minLabelNumber = num_classes
             self.maxLabelNumber = num_classes
