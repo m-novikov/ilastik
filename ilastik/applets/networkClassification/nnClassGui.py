@@ -54,6 +54,7 @@ from ilastik.shell.gui.iconMgr import ilastikIcons
 from volumina.api import LazyflowSource, AlphaModulatedLayer, GrayscaleLayer
 from volumina.utility import preferences
 
+from lazyflow.operators import tiktorch
 from tiktorch.types import ModelState
 from tiktorch.configkeys import TRAINING, NUM_ITERATIONS_DONE, NUM_ITERATIONS_MAX
 
@@ -659,6 +660,10 @@ class NNClassGui(LabelingGui):
         self.parentApplet.appletStateUpdateRequested()
         self.labelingDrawerUi.livePrediction.setEnabled(True)
 
+    @property
+    def connectionFactory(self) -> tiktorch.IConnectionFactory:
+        return self.parentApplet.connectionFactory
+
     def toggleLiveTraining(self, checked):
         logger.debug("toggle live training, checked: %r", checked)
         if not self.topLevelOperatorView.ClassifierFactory.ready():
@@ -725,7 +730,12 @@ class NNClassGui(LabelingGui):
             self._viewerControlUi.checkShowPredictions.setCheckState(Qt.PartiallyChecked)
 
     def closeModelClick(self):
-        model = self.topLevelOperatorView.set_model(b"")
+        self.topLevelOperatorView.ModelBinary.setValue(b"")
+
+        model = self.topLevelOperatorView.ModelSession.value
+        self.topLevelOperatorView.ModelSession.setValue(None)
+
+        model.close()
 
     def addModel(self):
         """
@@ -752,7 +762,7 @@ class NNClassGui(LabelingGui):
             #         tiktorchFactory.shutdown()
 
             # user did not cancel selection
-            self.add_NN_classifiers(filename)
+            self.loadModel(filename)
             preferences.set("DataSelection", "recent model", filename)
             self.parentApplet.appletStateUpdateRequested()
             self.labelingDrawerUi.addModel.setEnabled(True)
@@ -760,38 +770,30 @@ class NNClassGui(LabelingGui):
     def _load_checkpoint(self, model_state: ModelState):
         self.topLevelOperatorView.set_model_state(model_state)
 
-    def add_NN_classifiers(self, model_path):
+
+    def loadModel(self, modelPath: str) -> None:
         """
-        Adds the chosen FilePath to the classifierDictionary and to the ComboBox
+        Loads tiktorch model to server
         """
-        # clear first the comboBox or addItems will duplicate names
-        # self.labelingDrawerUi.comboBox.clear()
-        # self.labelingDrawerUi.comboBox.addItems(self.classifiers)
         self.labelingDrawerUi.liveTraining.setEnabled(True)
         self.labelingDrawerUi.livePrediction.setEnabled(True)
 
-        # factory = self.topLevelOperatorView.ClassifierFactory[:].wait()[0]
-        # return
+        with open(modelPath, "rb") as modelFile:
+            modelBytes = modelFile.read()
 
+        srvConfig = self.topLevelOperatorView.ServerConfig.value
 
-        with open(model_path, "rb") as model_f:
-            success = self.topLevelOperatorView.set_model(model_f.read())
+        connection = self.connectionFactory.ensure_connection(self.topLevelOperatorView.ServerConfig.value)
+        model = connection.create_model_session(modelBytes, [d.id for d in srvConfig.devices])
 
-        if success:
-            model = self.topLevelOperatorView.opModel.TiktorchModel.value
-            if model is self.topLevelOperatorView.NO_MODEL:
-                return
+        numClasses = len(model.known_classes)
+        self.topLevelOperatorView.ModelBinary.setValue(modelBytes)
+        self.topLevelOperatorView.ModelSession.setValue(model)
+        self.topLevelOperatorView.NumClasses.setValue(numClasses)
 
-            num_classes = len(model.known_classes)
-            self.minLabelNumber = num_classes
-            self.maxLabelNumber = num_classes
-            # for i in range(num_classes):
-            #     self.labelingDrawerUi.labelListModel.makeRowPermanent(i)
-            # self.setupLayers()
-            self.updateAllLayers()
-
-    def set_NN_classifier_name(self, name: str):
-        pass
+        self.minLabelNumber = numClasses
+        self.maxLabelNumber = numClasses
+        self.updateAllLayers()
 
     def getModelToOpen(cls, parent_window, defaultDirectory):
         """
@@ -903,5 +905,5 @@ class NNClassGui(LabelingGui):
             except KeyError:
                 continue
             color = layer.tintColor
-            color = (old_div(color.red(), 255.0), old_div(color.green(), 255.0), old_div(color.blue(), 255.0))
+            color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
             self._renderMgr.setColor(label, color)

@@ -52,6 +52,74 @@ class BinarySlot(SerialSlot):
         slot.setValue(val.tobytes())
 
 
+class JSONSerialzierRegistry:
+    _SERIALIZER_KEY_STR = "__serializer_key"
+    _SERIALIZER_DATA_STR = "__serialized_data"
+
+    def __init__(self):
+        self._serializer_by_key = {}
+        self._serializer_by_type = {}
+
+    def register_serializer(self, type_, key):
+
+        def _register_serializer(serializer_cls):
+            self._serializer_by_type[type_] = (serializer_cls, key)
+            self._serializer_by_key[key] = serializer_cls
+            return serializer_cls
+
+        return _register_serializer
+
+    registerSerializer = register_serializer
+
+    @property
+    def encoder_cls(self):
+        class Encoder(json.JSONEncoder):
+            def default(encoder_self, obj):
+                type_ = type(obj)
+                serializer_cls, key = self._serializer_by_type.get(type_, (None, None))
+                if not serializer_cls:
+                    raise Exception(f"No serializer for class {type} found")
+                serialized_data = serializer_cls.serialize(obj)
+
+                return {
+                    self._SERIALIZER_KEY_STR: key,
+                    self._SERIALIZER_DATA_STR: serialized_data,
+                }
+
+        return Encoder
+
+
+    def object_hook(self, dct):
+        serializer_key = dct.get(self._SERIALIZER_KEY_STR, None)
+
+        if not serializer_key:
+            return dct
+
+        serializer_cls = self._serializer_by_key.get(serializer_key)
+        if not serializer_cls:
+            raise Exception(f"Unknown serializer key {serializer_key}")
+
+        return serializer_cls.deserialize(dct.get(self._SERIALIZER_DATA_STR))
+
+
+class JSONSerialSlot(SerialSlot):
+    """
+    Implements the logic for serializing a json serializable object slot.
+
+    wraps value with numpy.void to avoid the following error:
+    ValueError: VLEN strings do not support embedded NULLs
+    """
+    @staticmethod
+    def _saveValue(group, name, value):
+        jsonString = json.dumps(value, cls=JSONEncoder)
+        group.create_dataset(name, data=np.void(value))
+
+    @staticmethod
+    def _getValue(subgroup, slot):
+        val = subgroup[()]
+        slot.setValue(val.tobytes())
+
+
 class NNClassificationSerializer(AppletSerializer):
     def __init__(self, topLevelOperator, projectFileGroupName):
         self.VERSION = 1

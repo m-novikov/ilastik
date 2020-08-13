@@ -56,6 +56,9 @@ class NNClassApplet(StandardApplet):
         # If we start reporting progress for multiple tasks that might occur simulatneously,
         # we'll need to aggregate the progress updates.
         self._topLevelOperator.opTrain.progressSignal.subscribe(self.progressSignal)
+        self.connectionFactory = connectionFactory
+
+
 
     @property
     def dataSerializers(self):
