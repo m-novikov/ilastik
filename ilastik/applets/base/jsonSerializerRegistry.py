@@ -118,6 +118,7 @@ _SERIALIZER_REGISTRY = _DictSerialzierRegistry()
 def register_serializer(type_: Type) -> Callable[[Type[IDictSerializer]], Type[IDictSerializer]]:
     return _SERIALIZER_REGISTRY.register_serializer(type_)
 
+registerSerializer = register_serializer
 
 def deserialize(expected_type: Type[T], dct: Dict[str, Any]) -> T:
     return _SERIALIZER_REGISTRY.deserialize(expected_type, dct)

@@ -50,6 +50,7 @@ from ilastik.applets.labeling.labelingGui import LabelingGui
 from ilastik.utility.gui import threadRouted
 from ilastik.utility import bind
 from ilastik.shell.gui.iconMgr import ilastikIcons
+from .tiktorchController import TiktorchController
 
 from volumina.api import LazyflowSource, AlphaModulatedLayer, GrayscaleLayer
 from volumina.utility import preferences
@@ -326,6 +327,7 @@ class CheckpointWidget(QWidget):
             self.load_clicked.emit(QPersistentModelIndex(idx))
 
 
+
 class NNClassGui(LabelingGui):
     """
     LayerViewerGui class for Neural Network Classification
@@ -432,6 +434,7 @@ class NNClassGui(LabelingGui):
             labelingDrawerUiPath = os.path.join(localDir, "nnClassAppletUiTest.ui")
 
         super(NNClassGui, self).__init__(parentApplet, labelSlots, topLevelOperatorView, labelingDrawerUiPath)
+
         self._initCheckpointActions()
 
         self.parentApplet = parentApplet
@@ -453,10 +456,13 @@ class NNClassGui(LabelingGui):
         self.set_live_predict_icon(self.livePrediction)
         self.labelingDrawerUi.livePrediction.toggled.connect(self.toggleLivePrediction)
 
-        self.labelingDrawerUi.addModel.clicked.connect(self.addModel)
+        self.labelingDrawerUi.addModel.clicked.connect(self.addModelClicked)
         self.labelingDrawerUi.closeModel.setVisible(False)
         self.labelingDrawerUi.closeModel.setIcon(QIcon(ilastikIcons.ProcessStop))
-        self.labelingDrawerUi.closeModel.clicked.connect(self.closeModelClick)
+        self.labelingDrawerUi.closeModel.clicked.connect(self.closeModelClicked)
+        self.labelingDrawerUi.uploadModel.setVisible(False)
+        self.labelingDrawerUi.uploadModel.setIcon(QIcon(ilastikIcons.Upload))
+        self.labelingDrawerUi.uploadModel.clicked.connect(self.uploadModelClicked)
 
         self.initViewerControls()
         self.initViewerControlUi()
@@ -477,28 +483,8 @@ class NNClassGui(LabelingGui):
 
         self.invalidatePredictionsTimer = QTimer()
         self.invalidatePredictionsTimer.timeout.connect(self.updatePredictions)
-
-        self._notifyModelSession(self.topLevelOperatorView.ModelSession)
-        self.topLevelOperatorView.ModelSession.notifyDirty(self._notifyModelSession)
-
-    def _notifyModelSession(self, slot, roi=None):
-        if slot.ready():
-            model = slot.value
-            if model and model is not self.topLevelOperatorView.NO_MODEL:
-                self.labelingDrawerUi.addModel.setText(f"{model.name}")
-                self.labelingDrawerUi.closeModel.setVisible(True)
-                self.labelingDrawerUi.closeModel.setVisible(True)
-                self.labelingDrawerUi.livePrediction.setEnabled(True)
-                self.labelingDrawerUi.liveTraining.setVisible(model.has_training)
-                self.labelingDrawerUi.checkpoints.setVisible(model.has_training)
-                return
-
-        self.labelingDrawerUi.addModel.setText("Load model")
-        self.labelingDrawerUi.addModel.setChecked(False)
-        self.labelingDrawerUi.closeModel.setVisible(False)
-        self.labelingDrawerUi.livePrediction.setEnabled(False)
-        self.labelingDrawerUi.liveTraining.setVisible(False)
-        self.labelingDrawerUi.checkpoints.setVisible(False)
+        self.tiktorchController = parentApplet.tiktorchController
+        self.tiktorchController.registerListener(self.onModelStateChanged)
 
     def set_live_training_icon(self, active: bool):
         if active:
@@ -729,15 +715,10 @@ class NNClassGui(LabelingGui):
         else:
             self._viewerControlUi.checkShowPredictions.setCheckState(Qt.PartiallyChecked)
 
-    def closeModelClick(self):
-        self.topLevelOperatorView.ModelBinary.setValue(b"")
+    def closeModelClicked(self):
+        self.tiktorchController.closeModel()
 
-        model = self.topLevelOperatorView.ModelSession.value
-        self.topLevelOperatorView.ModelSession.setValue(None)
-
-        model.close()
-
-    def addModel(self):
+    def addModelClicked(self):
         """
         When AddModel button is clicked.
         """
@@ -762,39 +743,64 @@ class NNClassGui(LabelingGui):
             #         tiktorchFactory.shutdown()
 
             # user did not cancel selection
-            self.loadModel(filename)
+            self.labelingDrawerUi.liveTraining.setEnabled(True)
+            self.labelingDrawerUi.livePrediction.setEnabled(True)
+            self.tiktorchController.loadModel(filename)
+
+
             preferences.set("DataSelection", "recent model", filename)
             self.parentApplet.appletStateUpdateRequested()
             self.labelingDrawerUi.addModel.setEnabled(True)
+
+    def uploadModelClicked(self):
+        self.tiktorchController.uploadModel()
+
+    def onModelStateChanged(self, state):
+        if state == TiktorchController.State.Empty:
+            self.labelingDrawerUi.addModel.setText("Load model")
+            self.labelingDrawerUi.addModel.setChecked(False)
+            self.labelingDrawerUi.closeModel.setVisible(False)
+            self.labelingDrawerUi.livePrediction.setEnabled(False)
+            self.labelingDrawerUi.liveTraining.setVisible(False)
+            self.labelingDrawerUi.checkpoints.setVisible(False)
+
+            self.updateAllLayers()
+
+        elif state == TiktorchController.State.Read:
+            info = self.tiktorchController.modelInfo
+            self.labelingDrawerUi.addModel.setText(f"{info.name}")
+
+            self.minLabelNumber = info.numClasses
+            self.maxLabelNumber = info.numClasses
+
+            self.updateAllLayers()
+            self.labelingDrawerUi.uploadModel.setVisible(True)
+
+        elif state == TiktorchController.State.Ready:
+            info = self.tiktorchController.modelInfo
+
+            self.labelingDrawerUi.addModel.setText(f"{info.name}")
+            self.labelingDrawerUi.closeModel.setVisible(True)
+            self.labelingDrawerUi.livePrediction.setEnabled(True)
+            self.labelingDrawerUi.liveTraining.setVisible(info.hasTraining)
+            self.labelingDrawerUi.checkpoints.setVisible(info.hasTraining)
+
+            self.minLabelNumber = info.numClasses
+            self.maxLabelNumber = info.numClasses
+
+            self.updateAllLayers()
+
+        elif state == TiktorchController.State.Loading:
+            pass
+
+        elif state == TiktorchController.State.Error:
+            pass
 
     def _load_checkpoint(self, model_state: ModelState):
         self.topLevelOperatorView.set_model_state(model_state)
 
 
-    def loadModel(self, modelPath: str) -> None:
-        """
-        Loads tiktorch model to server
-        """
-        self.labelingDrawerUi.liveTraining.setEnabled(True)
-        self.labelingDrawerUi.livePrediction.setEnabled(True)
-
-        with open(modelPath, "rb") as modelFile:
-            modelBytes = modelFile.read()
-
-        srvConfig = self.topLevelOperatorView.ServerConfig.value
-
-        connection = self.connectionFactory.ensure_connection(self.topLevelOperatorView.ServerConfig.value)
-        model = connection.create_model_session(modelBytes, [d.id for d in srvConfig.devices])
-
-        numClasses = len(model.known_classes)
-        self.topLevelOperatorView.ModelBinary.setValue(modelBytes)
-        self.topLevelOperatorView.ModelSession.setValue(model)
-        self.topLevelOperatorView.NumClasses.setValue(numClasses)
-
-        self.minLabelNumber = numClasses
-        self.maxLabelNumber = numClasses
-        self.updateAllLayers()
-
+    @classmethod
     def getModelToOpen(cls, parent_window, defaultDirectory):
         """
         opens a QFileDialog for importing files

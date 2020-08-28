@@ -103,6 +103,10 @@ class ModelSession:
     def known_classes(self):
         return [1, 2]
 
+    @property
+    def num_classes(self):
+        return len(self.known_classes)
+
     def update(self, feature_images: Iterable, label_images: Iterable, axistags, image_ids: Iterable):
         # TODO: check whether loaded network has the same number of classes as specified in ilastik!
         return
