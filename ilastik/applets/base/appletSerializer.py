@@ -1223,6 +1223,9 @@ class JSONSerialSlot(SerialSlot):
         """
         Overrides main deserialize method to store data in attributes
         """
+        if self.name not in group.attrs:
+            return
+
         val = group.attrs[self.name]
         jsonData = json.loads(val)
         result = self._registry.deserialize(self._obj_class, jsonData)
